@@ -233,11 +233,13 @@ class LibraryApp(tk.Tk):
         if book:
             _, title, author, desc, lang, bnf_path = book
             tags = get_tags_for_book(book_id)
+            folder = os.path.dirname(bnf_path)
+            base_name = os.path.splitext(os.path.basename(bnf_path))[0]
 
             self.details_text.config(state="normal")
             self.details_text.delete(1.0, tk.END)
 
-            # Настройки стиля
+            # Стили
             self.details_text.tag_configure("label", font=("TkDefaultFont", 10, "bold"), spacing3=5)
             self.details_text.tag_configure("value", spacing3=5)
             self.details_text.tag_configure("taglink", foreground="blue", underline=True)
@@ -264,7 +266,47 @@ class LibraryApp(tk.Tk):
                     self.details_text.insert(tk.END, ", ", "value")
             self.details_text.insert(tk.END, "\n", "value")
 
+            # Язык
+            self.details_text.insert(tk.END, "\nЯзык: ", "label")
+            if lang in ("ru", "en"):
+                self.details_text.insert(tk.END, lang, "taglink")
+                self.details_text.tag_bind("taglink", "<Button-1>",
+                                           lambda e, l=lang: self.open_lang_file(folder, base_name, l, paraline=False))
+            elif lang == "en-ru":
+                langs = [("ru", False), ("en", False), ("en-ru", True)]
+                for i, (l, use_paraline) in enumerate(langs):
+                    tag_name = f"langlink_{i}"
+                    self.details_text.insert(tk.END, l, tag_name)
+                    self.details_text.tag_config(tag_name, foreground="blue", underline=True)
+                    self.details_text.tag_bind(tag_name, "<Button-1>",
+                                               lambda e, ll=l, pp=use_paraline: self.open_lang_file(folder, base_name,
+                                                                                                    ll, paraline=pp))
+                    if i != len(langs) - 1:
+                        self.details_text.insert(tk.END, ", ", "value")
+            self.details_text.insert(tk.END, "\n\n", "value")
+
             self.details_text.config(state="disabled")
+
+    def open_lang_file(self, folder, base_name, lang_code, paraline=False):
+        if lang_code in ("ru", "en"):
+            file_name = f"{base_name}.{lang_code}.md"
+        elif lang_code == "en-ru":
+            file_name = f"{base_name}.en.md"
+        else:
+            file_name = f"{base_name}.md"
+
+        file_path = os.path.join(folder, file_name)
+        if not os.path.exists(file_path):
+            messagebox.showerror("Ошибка", f"Файл {file_path} не найден")
+            return
+
+        try:
+            if paraline:
+                subprocess.Popen(["/home/nikolay/bin/paraline", file_path])
+            else:
+                subprocess.Popen(["mousepad", file_path])
+        except Exception as e:
+            messagebox.showerror("Ошибка", str(e))
 
     def open_bnf_file(self, event):
         sel = self.tree.selection()
@@ -288,38 +330,6 @@ class LibraryApp(tk.Tk):
                 messagebox.showerror("Ошибка", f"Файл {target_file} не найден")
                 return
             subprocess.Popen(["mousepad", target_file])
-        except Exception as e:
-            messagebox.showerror("Ошибка", str(e))
-
-    def open_file(self, event):
-        sel = self.tree.selection()
-        if not sel:
-            return
-        book_id = self.tree.item(sel[0])["values"][0]
-        book = get_book(book_id)
-        if not book:
-            return
-        _, title, author, desc, lang, bnf_path = book
-        if not bnf_path or not os.path.exists(bnf_path):
-            messagebox.showerror("Ошибка", "Файл .bnf не найден")
-            return
-
-        folder = os.path.dirname(bnf_path)
-        base_name = os.path.splitext(os.path.basename(bnf_path))[0]
-
-        try:
-            if lang == "en-ru":
-                target_file = os.path.join(folder, f"{base_name}.en.md")
-                if not os.path.exists(target_file):
-                    messagebox.showerror("Ошибка", f"Файл {target_file} не найден")
-                    return
-                subprocess.Popen(["/home/nikolay/bin/paraline", target_file])
-            else:
-                target_file = os.path.join(folder, f"{base_name}.md")
-                if not os.path.exists(target_file):
-                    messagebox.showerror("Ошибка", f"Файл {target_file} не найден")
-                    return
-                subprocess.Popen(["xdg-open", target_file])  # или открыть чем-то ещё
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
 
