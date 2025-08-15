@@ -30,7 +30,7 @@ BASE_HTML = """
     <form method="get">
         <input type="text" name="q" placeholder="Поиск..." value="{{ query }}">
         <button type="submit">Искать</button>
-        {% if query %}
+        {% if query or tag or author %}
         <a href="/" style="margin-left:10px;">Сброс</a>
         {% endif %}
     </form>
@@ -38,24 +38,22 @@ BASE_HTML = """
     <table>
         <tr>
             <th>ID</th>
-            <th>Автор</th>
-            <th>Название</th>
+            <th><a href="/?sort=author{% if query %}&q={{ query }}{% endif %}{% if tag %}&tag={{ tag }}{% endif %}{% if author %}&author={{ author }}{% endif %}">Автор</a></th>
+            <th><a href="/?sort=title{% if query %}&q={{ query }}{% endif %}{% if tag %}&tag={{ tag }}{% endif %}{% if author %}&author={{ author }}{% endif %}">Название</a></th>
             <th>Описание</th>
             <th>Теги</th>
-            <th>Язык</th>
         </tr>
         {% for book in books %}
         <tr>
             <td>{{ book['id'] }}</td>
             <td><a href="/?author={{ book['author'] }}" style="color:blue">{{ book['author'] }}</a></td>
             <td><a href="/book/{{ book['id'] }}">{{ book['title'] }}</a></td>
-            <td><a href="/book/{{ book['id'] }}">{{ book['description'] }}</a></td>
+            <td>{{ book['description'] }}</td>
             <td>
                 {% for tag in book['tags'] %}
                     <a href="/?tag={{ tag }}" class="tag">{{ tag }}</a>{% if not loop.last %}, {% endif %}
                 {% endfor %}
             </td>
-            <td>{{ book['lang'] }}</td>
         </tr>
         {% endfor %}
     </table>
@@ -125,30 +123,33 @@ BOOK_HTML = """
 """
 
 # --- БД ---
-def get_books(query=None, tag=None, author=None):
+def get_books(query=None, tag=None, author=None, sort="title"):
+    if sort not in ("title", "author"):
+        sort = "title"
+
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
     if author:
-        cur.execute("SELECT * FROM books WHERE author=? ORDER BY title", (author,))
+        cur.execute(f"SELECT * FROM books WHERE author=? ORDER BY {sort}", (author,))
     elif tag:
-        cur.execute("""
+        cur.execute(f"""
             SELECT DISTINCT books.* FROM books
             JOIN book_tags ON books.id = book_tags.book_id
             JOIN tags ON tags.id = book_tags.tag_id
             WHERE tags.name=?
-            ORDER BY books.title
+            ORDER BY books.{sort}
         """, (tag,))
     elif query:
-        cur.execute("""
+        cur.execute(f"""
             SELECT DISTINCT books.* FROM books
             LEFT JOIN book_tags ON books.id = book_tags.book_id
             LEFT JOIN tags ON tags.id = book_tags.tag_id
             WHERE books.title LIKE ? OR books.author LIKE ? OR tags.name LIKE ?
-            ORDER BY books.title
+            ORDER BY books.{sort}
         """, (f"%{query}%", f"%{query}%", f"%{query}%"))
     else:
-        cur.execute("SELECT * FROM books ORDER BY title")
+        cur.execute(f"SELECT * FROM books ORDER BY {sort}")
     rows = cur.fetchall()
     conn.close()
 
@@ -176,6 +177,7 @@ def get_book(id):
     return {
         "id": book["id"],
         "title": book["title"],
+        "description": book["description"],
         "author": book["author"],
         "lang": book["lang"],
         "bnf_path": book["bnf_path"],
@@ -202,8 +204,9 @@ def index():
     q = request.args.get("q", "").strip()
     tag = request.args.get("tag", "").strip()
     author = request.args.get("author", "").strip()
-    books = get_books(query=q if q else None, tag=tag if tag else None, author=author if author else None)
-    return render_template_string(BASE_HTML, books=books, query=q)
+    sort = request.args.get("sort", "title")  # по умолчанию сортируем по названию
+    books = get_books(query=q if q else None, tag=tag if tag else None, author=author if author else None, sort=sort)
+    return render_template_string(BASE_HTML, books=books, query=q, tag=tag, author=author, sort=sort)
 
 @app.route("/book/<int:book_id>")
 def view_book(book_id):
