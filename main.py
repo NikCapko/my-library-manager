@@ -176,7 +176,7 @@ class LibraryApp(tk.Tk):
             self.tree.column(col, width=width)
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.tree.bind("<<TreeviewSelect>>", self.show_details)
-        self.tree.bind("<Double-1>", self.open_file)
+        self.tree.bind("<Double-1>", self.open_bnf_file)
 
         # Скроллбар
         scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=self.tree.yview)
@@ -265,6 +265,31 @@ class LibraryApp(tk.Tk):
             self.details_text.insert(tk.END, "\n", "value")
 
             self.details_text.config(state="disabled")
+
+    def open_bnf_file(self, event):
+        sel = self.tree.selection()
+        if not sel:
+            return
+        book_id = self.tree.item(sel[0])["values"][0]
+        book = get_book(book_id)
+        if not book:
+            return
+        _, title, author, desc, lang, bnf_path = book
+        if not bnf_path or not os.path.exists(bnf_path):
+            messagebox.showerror("Ошибка", "Файл .bnf не найден")
+            return
+
+        folder = os.path.dirname(bnf_path)
+        base_name = os.path.splitext(os.path.basename(bnf_path))[0]
+
+        try:
+            target_file = os.path.join(folder, f"{base_name}.bnf")
+            if not os.path.exists(target_file):
+                messagebox.showerror("Ошибка", f"Файл {target_file} не найден")
+                return
+            subprocess.Popen(["mousepad", target_file])
+        except Exception as e:
+            messagebox.showerror("Ошибка", str(e))
 
     def open_file(self, event):
         sel = self.tree.selection()
