@@ -148,8 +148,8 @@ class LibraryApp(tk.Tk):
         search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         search_entry.bind("<Return>", lambda e: self.refresh_books())
 
-        ttk.Button(top_frame, text="Поиск", command=self.refresh_books).pack(side=tk.LEFT, padx=2)
-        ttk.Button(top_frame, text="Сбросить", command=self.reset_search).pack(side=tk.LEFT, padx=2)
+        ttk.Button(top_frame, text="🔎", width=3, command=self.refresh_books).pack(side=tk.LEFT, padx=2)
+        ttk.Button(top_frame, text="❌", width=3, command=self.reset_search).pack(side=tk.LEFT, padx=2)
         ttk.Button(top_frame, text="Импорт .bnf", command=self.import_bnf).pack(side=tk.LEFT, padx=2)
         ttk.Button(top_frame, text="Сканировать папку", command=self.scan_folder).pack(side=tk.LEFT, padx=2)
         ttk.Button(top_frame, text="Экспорт CSV", command=self.export_csv).pack(side=tk.LEFT, padx=2)
@@ -237,22 +237,32 @@ class LibraryApp(tk.Tk):
             self.details_text.config(state="normal")
             self.details_text.delete(1.0, tk.END)
 
-            self.details_text.insert(tk.END, f"Название: {title}\n")
-            self.details_text.insert(tk.END, f"Автор: {author}\n")
-            self.details_text.insert(tk.END, "Теги: ")
+            # Настройки стиля
+            self.details_text.tag_configure("label", font=("TkDefaultFont", 10, "bold"), spacing3=5)
+            self.details_text.tag_configure("value", spacing3=5)
+            self.details_text.tag_configure("taglink", foreground="blue", underline=True)
 
-            # Выводим теги как кликабельные
+            # Название
+            self.details_text.insert(tk.END, "Название: ", "label")
+            self.details_text.insert(tk.END, f"{title}\n", "value")
+
+            # Автор
+            self.details_text.insert(tk.END, "Автор: ", "label")
+            self.details_text.insert(tk.END, f"{author}\n", "value")
+
+            # Описание
+            self.details_text.insert(tk.END, "\nОписание:\n", "label")
+            self.details_text.insert(tk.END, desc, "value")
+
+            # Теги
+            self.details_text.insert(tk.END, "\n\nТеги: ", "label")
             for i, tag in enumerate(tags):
-                tag_start = self.details_text.index(tk.INSERT)
-                self.details_text.insert(tk.END, tag)
-                tag_end = self.details_text.index(tk.INSERT)
-                self.details_text.tag_add(f"tag_{i}", tag_start, tag_end)
-                self.details_text.tag_config(f"tag_{i}", foreground="blue", underline=True)
-                self.details_text.tag_bind(f"tag_{i}", "<Button-1>", lambda e, t=tag: self.search_by_tag(t))
+                start_index = self.details_text.index(tk.INSERT)
+                self.details_text.insert(tk.END, tag, "taglink")
+                self.details_text.tag_bind("taglink", "<Button-1>", lambda e, t=tag: self.search_by_tag(t))
                 if i != len(tags) - 1:
-                    self.details_text.insert(tk.END, ", ")
-
-            self.details_text.insert(tk.END, "\n\n" + desc)
+                    self.details_text.insert(tk.END, ", ", "value")
+            self.details_text.insert(tk.END, "\n", "value")
 
             self.details_text.config(state="disabled")
 
