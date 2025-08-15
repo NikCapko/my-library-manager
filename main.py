@@ -160,19 +160,20 @@ class LibraryApp(tk.Tk):
 
         # Список книг
         column_widths = {
-            "id": 50,
+            "id": 1,
             "author": 200,
-            "title": 1000,
+            "title": 400,
+            "description": 800,
         }
 
-        self.tree = ttk.Treeview(main_frame, columns=("id", "author", "title"), show="headings")
-        for col, text in zip(("id", "author", "title"),
-                             ("ID", "Автор", "Название",)):
+        self.tree = ttk.Treeview(main_frame, columns=("id", "author", "title", "description"), show="headings")
+        for col, text in zip(("id", "author", "title", "description"),
+                             ("ID", "Автор", "Название", "Описание")):
             self.tree.heading(col, text=text)
             self.tree.column(col)
         for col in self.tree["columns"]:
             width = column_widths.get(col, 10)
-            self.tree.column(col, width=width, minwidth=20)
+            self.tree.column(col, width=width)
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.tree.bind("<<TreeviewSelect>>", self.show_details)
         self.tree.bind("<Double-1>", self.open_file)
@@ -183,7 +184,7 @@ class LibraryApp(tk.Tk):
         scrollbar.pack(side=tk.LEFT, fill=tk.Y)
 
         # Панель деталей
-        self.details_text = tk.Text(main_frame, wrap=tk.WORD, width=40)
+        self.details_text = tk.Text(main_frame, wrap=tk.WORD, width=50)
         self.details_text.pack(side=tk.RIGHT, fill=tk.BOTH)
 
         # Статус-бар
@@ -211,7 +212,7 @@ class LibraryApp(tk.Tk):
 
         for book in books:
             book_id, title, author, desc, lang, bnf_path = book
-            self.tree.insert("", tk.END, values=(book_id, author, title))
+            self.tree.insert("", tk.END, values=(book_id, author, title, desc))
 
         self.status_var.set(f"Найдено книг с тегом '{tag}': {len(books)}")
 
@@ -220,7 +221,7 @@ class LibraryApp(tk.Tk):
         books = get_books(self.search_var.get())
         for book in books:
             book_id, title, author, desc, lang, bnf_path = book
-            self.tree.insert("", tk.END, values=(book_id, author, title))
+            self.tree.insert("", tk.END, values=(book_id, author, title, desc))
         self.status_var.set(f"Найдено книг: {len(books)}")
 
     def show_details(self, event):
