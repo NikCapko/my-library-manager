@@ -13,7 +13,6 @@ BASE_HTML = """
 <!DOCTYPE html>
 <html>
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta charset="utf-8">
     <title>Библиотека</title>
     <style>
@@ -41,6 +40,7 @@ BASE_HTML = """
             <th>ID</th>
             <th>Автор</th>
             <th>Название</th>
+            <th>Описание</th>
             <th>Теги</th>
             <th>Язык</th>
         </tr>
@@ -49,6 +49,7 @@ BASE_HTML = """
             <td>{{ book['id'] }}</td>
             <td><a href="/?author={{ book['author'] }}" style="color:blue">{{ book['author'] }}</a></td>
             <td><a href="/book/{{ book['id'] }}">{{ book['title'] }}</a></td>
+            <td><a href="/book/{{ book['id'] }}">{{ book['description'] }}</a></td>
             <td>
                 {% for tag in book['tags'] %}
                     <a href="/?tag={{ tag }}" class="tag">{{ tag }}</a>{% if not loop.last %}, {% endif %}
@@ -156,6 +157,7 @@ def get_books(query=None, tag=None, author=None):
         books.append({
             "id": row["id"],
             "title": row["title"],
+            "description": row["description"],
             "author": row["author"],
             "lang": row["lang"],
             "tags": get_tags_for_book(row["id"])
