@@ -3,7 +3,6 @@ import json
 import os
 import sqlite3
 import subprocess
-import sys
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
@@ -78,6 +77,7 @@ def get_tags_for_book(book_id):
     tags = [row[0] for row in cur.fetchall()]
     conn.close()
     return tags
+
 
 def add_or_update_book(title, author, description, lang=None, bnf_path=None, tags=None):
     book_id = find_book_id(title, author)
@@ -159,11 +159,20 @@ class LibraryApp(tk.Tk):
         main_frame.pack(fill=tk.BOTH, expand=True)
 
         # Список книг
-        self.tree = ttk.Treeview(main_frame, columns=("id", "title", "author"), show="headings")
-        for col, text in zip(("id", "title", "author"),
-                             ("ID", "Название", "Автор")):
+        column_widths = {
+            "id": 50,
+            "author": 200,
+            "title": 1000,
+        }
+
+        self.tree = ttk.Treeview(main_frame, columns=("id", "author", "title"), show="headings")
+        for col, text in zip(("id", "author", "title"),
+                             ("ID", "Автор", "Название",)):
             self.tree.heading(col, text=text)
-            self.tree.column(col, width=100 if col != "title" else 250)
+            self.tree.column(col)
+        for col in self.tree["columns"]:
+            width = column_widths.get(col, 10)
+            self.tree.column(col, width=width, minwidth=20)
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.tree.bind("<<TreeviewSelect>>", self.show_details)
         self.tree.bind("<Double-1>", self.open_file)
@@ -197,19 +206,21 @@ class LibraryApp(tk.Tk):
             WHERE tags.name=?
             ORDER BY books.title
         """, (tag,))
-        rows = cur.fetchall()
+        books = cur.fetchall()
         conn.close()
 
-        for book in rows:
-            self.tree.insert("", tk.END, values=book)
+        for book in books:
+            book_id, title, author, desc, lang, bnf_path = book
+            self.tree.insert("", tk.END, values=(book_id, author, title))
 
-        self.status_var.set(f"Найдено книг с тегом '{tag}': {len(rows)}")
+        self.status_var.set(f"Найдено книг с тегом '{tag}': {len(books)}")
 
     def refresh_books(self):
         self.tree.delete(*self.tree.get_children())
         books = get_books(self.search_var.get())
         for book in books:
-            self.tree.insert("", tk.END, values=book)
+            book_id, title, author, desc, lang, bnf_path = book
+            self.tree.insert("", tk.END, values=(book_id, author, title))
         self.status_var.set(f"Найдено книг: {len(books)}")
 
     def show_details(self, event):
