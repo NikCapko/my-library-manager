@@ -1,6 +1,8 @@
-from flask import Flask, render_template_string, request, abort
-import sqlite3
 import os
+import sqlite3
+
+import markdown
+from flask import Flask, render_template_string, request, abort
 
 DB_FILE = "library.db"
 
@@ -11,6 +13,7 @@ BASE_HTML = """
 <!DOCTYPE html>
 <html>
 <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta charset="utf-8">
     <title>Библиотека</title>
     <style>
@@ -44,7 +47,7 @@ BASE_HTML = """
         {% for book in books %}
         <tr>
             <td>{{ book['id'] }}</td>
-            <td>{{ book['author'] }}</td>
+            <td><a href="/?author={{ book['author'] }}" style="color:blue">{{ book['author'] }}</a></td>
             <td><a href="/book/{{ book['id'] }}">{{ book['title'] }}</a></td>
             <td>
                 {% for tag in book['tags'] %}
@@ -64,28 +67,37 @@ BOOK_HTML = """
 <html>
 <head>
     <meta charset="utf-8">
-     <p><a href="/">Назад к списку</a></p>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+        <p><a href="/">Назад к списку</a></p>
     <title>{{ book['title'] }}</title>
     <style>
-        body { font-family: sans-serif; margin: 20px; }
-        pre { white-space: pre-wrap; word-wrap: break-word; border: 1px solid #ccc; padding: 10px; background: #fafafa; }
+        body { font-family: sans-serif; margin: 20px; font-size: 16px; }
+        .markdown-body h1, .markdown-body h2, .markdown-body h3 { margin-top: 20px; }
+        .markdown-body p { margin: 10px 0; }
+        .markdown-body code { background: #f4f4f4; padding: 2px 4px; border-radius: 4px; }
+        .markdown-body pre { background: #f4f4f4; padding: 10px; border-radius: 4px; overflow-x: auto; }
+        .markdown-body table { border-collapse: collapse; width: 100%; }
+        .markdown-body th, .markdown-body td { border: 1px solid #ccc; padding: 5px; }
+
+        pre { white-space: pre-wrap; word-wrap: break-word; border: 1px solid #ccc; padding: 10px; background: #fafafa; font-size: 16px; }
         .lang-btn { 
             margin-right: 10px; 
-            padding: 4px 8px; 
+            padding: 6px 10px; 
             border: 1px solid #ccc; 
             background: #f8f8f8; 
             display: inline-block; 
             text-decoration: none; 
             color: black; 
+            font-size: 16px;
         }
-        table { border-collapse: collapse; width: 100%; }
+        table { border-collapse: collapse; width: 100%; font-size: 16px; }
         th, td { border: 1px solid #ccc; padding: 5px; vertical-align: top; }
         th { background: #f2f2f2; }
     </style>
 </head>
 <body>
     <h1>{{ book['title'] }}</h1>
-    <p><b>Автор:</b> {{ book['author'] }}</p>
+    <p><b>Автор:</b> <a href="/?author={{ book['author'] }}" style="color:blue">{{ book['author'] }}</a></p>
     <p><b>Теги:</b>
         {% for tag in book['tags'] %}
             <a href="/?tag={{ tag }}" style="color:blue">{{ tag }}</a>{% if not loop.last %}, {% endif %}
@@ -103,21 +115,22 @@ BOOK_HTML = """
     <hr>
 
     {% if parallel %}
-        {{ content|safe }}
+    {{ content|safe }}
     {% else %}
-        <pre>{{ content }}</pre>
+        <div class="markdown-body">{{ content|safe }}</div>
     {% endif %}
 </body>
 </html>
 """
 
-
 # --- БД ---
-def get_books(query=None, tag=None):
+def get_books(query=None, tag=None, author=None):
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
-    if tag:
+    if author:
+        cur.execute("SELECT * FROM books WHERE author=? ORDER BY title", (author,))
+    elif tag:
         cur.execute("""
             SELECT DISTINCT books.* FROM books
             JOIN book_tags ON books.id = book_tags.book_id
@@ -138,7 +151,6 @@ def get_books(query=None, tag=None):
     rows = cur.fetchall()
     conn.close()
 
-    # добавляем теги в каждый объект
     books = []
     for row in rows:
         books.append({
@@ -168,6 +180,7 @@ def get_book(id):
         "tags": get_tags_for_book(book["id"])
     }
 
+
 def get_tags_for_book(book_id):
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
@@ -180,12 +193,14 @@ def get_tags_for_book(book_id):
     conn.close()
     return tags
 
+
 # --- Маршруты ---
 @app.route("/")
 def index():
     q = request.args.get("q", "").strip()
     tag = request.args.get("tag", "").strip()
-    books = get_books(query=q if q else None, tag=tag if tag else None)
+    author = request.args.get("author", "").strip()
+    books = get_books(query=q if q else None, tag=tag if tag else None, author=author if author else None)
     return render_template_string(BASE_HTML, books=books, query=q)
 
 @app.route("/book/<int:book_id>")
@@ -214,14 +229,26 @@ def view_book(book_id):
             file_path = os.path.join(folder, f"{base_name}.ru.md")
             if os.path.exists(file_path):
                 with open(file_path, "r", encoding="utf-8") as f:
-                    content = f.read()
+                    if file_path.endswith(".md"):
+                        with open(file_path, "r", encoding="utf-8") as f:
+                            md_text = f.read()
+                        content = markdown.markdown(md_text, extensions=["fenced_code", "tables"])
+                    else:
+                        with open(file_path, "r", encoding="utf-8") as f:
+                            content = f"<pre>{f.read()}</pre>"
             else:
                 content = f"[Файл {file_path} не найден]"
         elif ver == "en":
             file_path = os.path.join(folder, f"{base_name}.en.md")
             if os.path.exists(file_path):
                 with open(file_path, "r", encoding="utf-8") as f:
-                    content = f.read()
+                    if file_path.endswith(".md"):
+                        with open(file_path, "r", encoding="utf-8") as f:
+                            md_text = f.read()
+                        content = markdown.markdown(md_text, extensions=["fenced_code", "tables"])
+                    else:
+                        with open(file_path, "r", encoding="utf-8") as f:
+                            content = f"<pre>{f.read()}</pre>"
             else:
                 content = f"[Файл {file_path} не найден]"
         else:  # ver == "en-ru"
@@ -250,6 +277,6 @@ def view_book(book_id):
 
     return render_template_string(BOOK_HTML, book=book, content=content, parallel=parallel)
 
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
-    
