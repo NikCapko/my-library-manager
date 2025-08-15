@@ -261,7 +261,11 @@ class LibraryApp(tk.Tk):
             for i, tag in enumerate(tags):
                 start_index = self.details_text.index(tk.INSERT)
                 self.details_text.insert(tk.END, tag, "taglink")
-                self.details_text.tag_bind("taglink", "<Button-1>", lambda e, t=tag: self.search_by_tag(t))
+                # Создаем уникальное имя тега для каждой ссылки
+                tag_name = f"taglink_{i}"
+                self.details_text.tag_add(tag_name, f"end-{len(tag) + 1}c", "end")
+                self.details_text.tag_bind(tag_name, "<Button-1>", lambda e, t=tag: self.search_by_tag(t))
+
                 if i != len(tags) - 1:
                     self.details_text.insert(tk.END, ", ", "value")
             self.details_text.insert(tk.END, "\n", "value")
