@@ -1,8 +1,12 @@
 import os
+import re
 import sqlite3
 
 import markdown
 from flask import Flask, render_template_string, request, abort
+from markdown import Extension
+from markdown.blockprocessors import HashHeaderProcessor
+from markdown.extensions.toc import TocExtension
 
 DB_FILE = "library.db"
 
@@ -237,7 +241,13 @@ def view_book(book_id):
                     if file_path.endswith(".md"):
                         with open(file_path, "r", encoding="utf-8") as f:
                             md_text = f.read()
-                        content = markdown.markdown(md_text, extensions=["fenced_code", "tables"])
+                        md = markdown.Markdown(extensions=[StrictHeadersExtension(), TocExtension(), 'nl2br'])
+                        html_content = md.convert(md_text)
+                        toc_html = md.toc
+                        content = f"""
+                        <div class="toc">{toc_html}</div>
+                        {html_content}
+                        """
                     else:
                         with open(file_path, "r", encoding="utf-8") as f:
                             content = f"<pre>{f.read()}</pre>"
@@ -250,7 +260,13 @@ def view_book(book_id):
                     if file_path.endswith(".md"):
                         with open(file_path, "r", encoding="utf-8") as f:
                             md_text = f.read()
-                        content = markdown.markdown(md_text, extensions=["fenced_code", "tables"])
+                        md = markdown.Markdown(extensions=[StrictHeadersExtension(), TocExtension(), 'nl2br'])
+                        html_content = md.convert(md_text)
+                        toc_html = md.toc
+                        content = f"""
+                                          <div class="toc">{toc_html}</div>
+                                          {html_content}
+                                          """
                     else:
                         with open(file_path, "r", encoding="utf-8") as f:
                             content = f"<pre>{f.read()}</pre>"
@@ -282,6 +298,21 @@ def view_book(book_id):
 
     return render_template_string(BOOK_HTML, book=book, content=content, parallel=parallel)
 
+
+class StrictHeaderProcessor(HashHeaderProcessor):
+    """Обрабатывает только заголовки с пробелом после #"""
+    RE = re.compile(r'(?:^|\n)(?P<level>#{1,6})\s+(?P<header>.*?)\s*#*(\n|$)')
+
+class StrictHeadersExtension(Extension):
+    """Расширение для строгих заголовков"""
+    def extendMarkdown(self, md):
+        md.parser.blockprocessors.register(
+            StrictHeaderProcessor(md.parser),
+            'strict_hashheader',
+            70
+        )
+        # Удаляем стандартный процессор заголовков
+        md.parser.blockprocessors.deregister('hashheader')
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
