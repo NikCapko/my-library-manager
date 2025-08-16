@@ -153,9 +153,9 @@ class LibraryApp(tk.Tk):
 
         ttk.Button(top_frame, text="🔎", width=3, command=self.refresh_books).pack(side=tk.LEFT, padx=2)
         ttk.Button(top_frame, text="❌", width=3, command=self.reset_search).pack(side=tk.LEFT, padx=2)
-        #ttk.Button(top_frame, text="Импорт .bnf", command=self.import_bnf).pack(side=tk.LEFT, padx=2)
+        # ttk.Button(top_frame, text="Импорт .bnf", command=self.import_bnf).pack(side=tk.LEFT, padx=2)
         ttk.Button(top_frame, text="Сканировать папку", command=self.scan_folder).pack(side=tk.LEFT, padx=2)
-        #ttk.Button(top_frame, text="Экспорт CSV", command=self.export_csv).pack(side=tk.LEFT, padx=2)
+        # ttk.Button(top_frame, text="Экспорт CSV", command=self.export_csv).pack(side=tk.LEFT, padx=2)
 
         # Основная область
         main_frame = ttk.Frame(self)
@@ -266,7 +266,7 @@ class LibraryApp(tk.Tk):
         book_id = self.tree.item(sel[0])["values"][0]
         book = get_book(book_id)
         if book:
-            _, title, author, desc, lang, bnf_path = book
+            _, title, author, desc, lang, bnf_path, favorite = book
             tags = get_tags_for_book(book_id)
             folder = os.path.dirname(bnf_path)
             base_name = os.path.splitext(os.path.basename(bnf_path))[0]
@@ -316,7 +316,7 @@ class LibraryApp(tk.Tk):
             if lang in ("ru", "en"):
                 self.details_text.insert(tk.END, lang, "taglink")
                 self.details_text.tag_bind("taglink", "<Button-1>",
-                                           lambda e, l=lang: self.open_lang_file(folder, base_name, l, paraline=False))
+                                           lambda e, l=lang: self.open_file(folder, base_name))
             elif lang == "en-ru":
                 langs = [("ru", False), ("en", False), ("en-ru", True)]
                 for i, (l, use_paraline) in enumerate(langs):
@@ -432,6 +432,19 @@ class LibraryApp(tk.Tk):
                 subprocess.Popen(["/home/nikolay/bin/paraline", file_path])
             else:
                 subprocess.Popen(["mousepad", file_path])
+        except Exception as e:
+            messagebox.showerror("Ошибка", str(e))
+
+    def open_file(self, folder, base_name):
+        file_name = f"{base_name}.md"
+        file_path = os.path.join(folder, file_name)
+
+        if not os.path.exists(file_path):
+            messagebox.showerror("Ошибка", f"Файл {file_path} не найден")
+            return
+
+        try:
+            subprocess.Popen(["mousepad", file_path])
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
 
