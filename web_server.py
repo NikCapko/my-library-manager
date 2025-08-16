@@ -327,7 +327,14 @@ def view_book(book_id):
         file_path = os.path.join(folder, f"{base_name}.md")
         if os.path.exists(file_path):
             with open(file_path, "r", encoding="utf-8") as f:
-                content = f.read()
+                md_text = f.read()
+            md = markdown.Markdown(extensions=[StrictHeadersExtension(), TocExtension(), 'nl2br'])
+            html_content = md.convert(md_text)
+            toc_html = md.toc
+            content = f"""
+                                        <div class="toc">{toc_html}</div>
+                                        {html_content}
+                                    """
         else:
             content = f"[Файл {file_path} не найден]"
 
@@ -343,8 +350,8 @@ def view_book(book_id):
                         html_content = md.convert(md_text)
                         toc_html = md.toc
                         content = f"""
-                        <div class="toc">{toc_html}</div>
-                        {html_content}
+                            <div class="toc">{toc_html}</div>
+                            {html_content}
                         """
                     else:
                         with open(file_path, "r", encoding="utf-8") as f:
