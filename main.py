@@ -20,7 +20,8 @@ def init_db():
             author TEXT,
             description TEXT,
             lang TEXT,
-            bnf_path TEXT
+            bnf_path TEXT,
+            favorite INTEGER DEFAULT 0
         )
         """)
     cur.execute("""
@@ -254,7 +255,7 @@ class LibraryApp(tk.Tk):
         self.tree.delete(*self.tree.get_children())
         books = get_books(self.search_var.get())
         for book in books:
-            book_id, title, author, desc, lang, bnf_path = book
+            book_id, title, author, desc, lang, bnf_path, favorite = book
             self.tree.insert("", tk.END, values=(book_id, author, title, desc))
         self.status_var.set(f"Найдено книг: {len(books)}")
 

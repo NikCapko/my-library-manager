@@ -3,7 +3,7 @@ import re
 import sqlite3
 
 import markdown
-from flask import Flask, render_template_string, request, abort
+from flask import Flask, render_template_string, request, abort, redirect, url_for
 from markdown import Extension
 from markdown.blockprocessors import HashHeaderProcessor
 from markdown.extensions.toc import TocExtension
@@ -34,14 +34,16 @@ BASE_HTML = """
     <form method="get">
         <input type="text" name="q" placeholder="Поиск..." value="{{ query }}">
         <button type="submit">Искать</button>
-        {% if query or tag or author %}
+        {% if query or tag or author or favorite %}
         <a href="/" style="margin-left:10px;">Сброс</a>
         {% endif %}
+        <a href="/?favorite=1" style="margin-left:10px;">Только избранные</a>
     </form>
     <br>
     <table>
         <tr>
             <th>ID</th>
+            <th>★</th>
             <th><a href="/?sort=author{% if query %}&q={{ query }}{% endif %}{% if tag %}&tag={{ tag }}{% endif %}{% if author %}&author={{ author }}{% endif %}">Автор</a></th>
             <th><a href="/?sort=title{% if query %}&q={{ query }}{% endif %}{% if tag %}&tag={{ tag }}{% endif %}{% if author %}&author={{ author }}{% endif %}">Название</a></th>
             <th>Описание</th>
@@ -50,6 +52,13 @@ BASE_HTML = """
         {% for book in books %}
         <tr>
             <td>{{ book['id'] }}</td>
+            <td>
+              {% if book['favorite'] %}
+                <a href="/toggle_fav/{{ book['id'] }}">⭐</a>
+              {% else %}
+                <a href="/toggle_fav/{{ book['id'] }}">☆</a>
+              {% endif %}
+            </td>
             <td><a href="/?author={{ book['author'] }}" style="color:blue">{{ book['author'] }}</a></td>
             <td><a href="/book/{{ book['id'] }}">{{ book['title'] }}</a></td>
             <td>{{ book['description'] }}</td>
@@ -172,33 +181,41 @@ EDIT_HTML = """
 
 
 # --- БД ---
-def get_books(query=None, tag=None, author=None, sort="title"):
+def get_books(query=None, tag=None, author=None, sort="title", favorite=False):
     if sort not in ("title", "author"):
         sort = "title"
 
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
+
+    sql = "SELECT DISTINCT books.* FROM books "
+    joins = []
+    where = []
+    params = []
+
+    if tag:
+        joins.append("JOIN book_tags ON books.id = book_tags.book_id JOIN tags ON tags.id = book_tags.tag_id")
+        where.append("tags.name=?")
+        params.append(tag)
     if author:
-        cur.execute(f"SELECT * FROM books WHERE author=? ORDER BY {sort}", (author,))
-    elif tag:
-        cur.execute(f"""
-            SELECT DISTINCT books.* FROM books
-            JOIN book_tags ON books.id = book_tags.book_id
-            JOIN tags ON tags.id = book_tags.tag_id
-            WHERE tags.name=?
-            ORDER BY books.{sort}
-        """, (tag,))
-    elif query:
-        cur.execute(f"""
-            SELECT DISTINCT books.* FROM books
-            LEFT JOIN book_tags ON books.id = book_tags.book_id
-            LEFT JOIN tags ON tags.id = book_tags.tag_id
-            WHERE books.title LIKE ? OR books.author LIKE ? OR tags.name LIKE ?
-            ORDER BY books.{sort}
-        """, (f"%{query}%", f"%{query}%", f"%{query}%"))
-    else:
-        cur.execute(f"SELECT * FROM books ORDER BY {sort}")
+        where.append("books.author=?")
+        params.append(author)
+    if query:
+        joins.append("LEFT JOIN book_tags ON books.id = book_tags.book_id LEFT JOIN tags ON tags.id = book_tags.tag_id")
+        where.append("(books.title LIKE ? OR books.author LIKE ? OR tags.name LIKE ?)")
+        params += [f"%{query}%", f"%{query}%", f"%{query}%"]
+    if favorite:
+        where.append("books.favorite=1")
+
+    if joins:
+        sql += " " + " ".join(joins)
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+
+    sql += f" ORDER BY books.{sort}"
+
+    cur.execute(sql, tuple(params))
     rows = cur.fetchall()
     conn.close()
 
@@ -207,10 +224,10 @@ def get_books(query=None, tag=None, author=None, sort="title"):
         books.append({
             "id": row["id"],
             "title": row["title"],
-            "description": row["description"],
             "author": row["author"],
             "lang": row["lang"],
-            "tags": get_tags_for_book(row["id"])
+            "tags": get_tags_for_book(row["id"]),
+            "favorite": row["favorite"]
         })
     return books
 
@@ -255,8 +272,11 @@ def index():
     tag = request.args.get("tag", "").strip()
     author = request.args.get("author", "").strip()
     sort = request.args.get("sort", "title")  # по умолчанию сортируем по названию
-    books = get_books(query=q if q else None, tag=tag if tag else None, author=author if author else None, sort=sort)
-    return render_template_string(BASE_HTML, books=books, query=q, tag=tag, author=author, sort=sort)
+    favorite = request.args.get("favorite")
+    books = get_books(query=q if q else None, tag=tag if tag else None, author=author if author else None, sort=sort,
+                      favorite=(favorite == "1"))
+    return render_template_string(BASE_HTML, books=books, query=q, tag=tag, author=author, sort=sort,
+                                  favorite=(favorite == "1"))
 
 
 @app.route("/book/<int:book_id>")
@@ -403,6 +423,27 @@ def edit_book(book_id):
 
     tags = ", ".join(book["tags"])
     return render_template_string(EDIT_HTML, book=book, tags=tags)
+
+@app.route("/toggle_fav/<int:book_id>")
+def toggle_fav(book_id):
+    # переключаем флаг
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+    cur.execute("SELECT favorite FROM books WHERE id=?", (book_id,))
+    row = cur.fetchone()
+    if row:
+        new_val = 0 if row[0] else 1
+        cur.execute("UPDATE books SET favorite=? WHERE id=?", (new_val, book_id))
+        conn.commit()
+    conn.close()
+
+    # возвращаем обратно к списку, сохраняя фильтры
+    q = request.args.get("q", "")
+    tag = request.args.get("tag", "")
+    author = request.args.get("author", "")
+    favorite = request.args.get("favorite", "")
+
+    return redirect(url_for("index", q=q, tag=tag, author=author, favorite=favorite))
 
 
 class StrictHeaderProcessor(HashHeaderProcessor):
