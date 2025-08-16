@@ -3,7 +3,7 @@ import re
 import sqlite3
 
 import markdown
-from flask import Flask, render_template_string, request, abort, redirect, url_for
+from flask import Flask, render_template_string, request, abort, redirect, url_for, make_response
 from markdown import Extension
 from markdown.blockprocessors import HashHeaderProcessor
 from markdown.extensions.toc import TocExtension
@@ -281,13 +281,29 @@ def index():
     q = request.args.get("q", "").strip()
     tag = request.args.get("tag", "").strip()
     author = request.args.get("author", "").strip()
-    sort = request.args.get("sort", "title")  # по умолчанию сортируем по названию
-    favorite = request.args.get("favorite")
-    books = get_books(query=q if q else None, tag=tag if tag else None, author=author if author else None, sort=sort,
-                      favorite=(favorite == "1"))
-    return render_template_string(BASE_HTML, books=books, query=q, tag=tag, author=author, sort=sort,
-                                  favorite=(favorite == "1"))
+    sort = request.args.get("sort", "title")
+    favorite = request.args.get("favorite", "")
 
+    books = get_books(
+        query=q if q else None,
+        tag=tag if tag else None,
+        author=author if author else None,
+        sort=sort,
+        favorite=(favorite == "1")
+    )
+
+    resp = make_response(render_template_string(
+        BASE_HTML,
+        books=books,
+        query=q,
+        tag=tag,
+        author=author,
+        sort=sort,
+        favorite=(favorite == "1")
+    ))
+    # 🔥 отключаем кэш для списка
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return resp
 
 @app.route("/book/<int:book_id>")
 def view_book(book_id):
