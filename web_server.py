@@ -116,8 +116,11 @@ BOOK_HTML = """
             <a href="/?tag={{ tag }}" style="color:blue">{{ tag }}</a>{% if not loop.last %}, {% endif %}
         {% endfor %}
     </p>
+    <p><b>Описание:</b></p>
+    <div style="margin:10px 0; padding:10px; border:1px solid #ccc; background:#fafafa;">
+        {{ book['description'] }}
+    </div>
     <p><b>Язык:</b> {{ book['lang'] }}</p>
-    
     <p><b>Избранное:</b>
         {% if book['favorite'] %}
             <a href="/toggle_fav/{{ book['id'] }}?from=book" style="font-size:22px; text-decoration:none;">⭐</a>
