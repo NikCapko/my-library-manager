@@ -117,6 +117,15 @@ BOOK_HTML = """
         {% endfor %}
     </p>
     <p><b>Язык:</b> {{ book['lang'] }}</p>
+    
+    <p><b>Избранное:</b>
+        {% if book['favorite'] %}
+            <a href="/toggle_fav/{{ book['id'] }}?from=book" style="font-size:22px; text-decoration:none;">⭐</a>
+        {% else %}
+            <a href="/toggle_fav/{{ book['id'] }}?from=book" style="font-size:22px; text-decoration:none;">☆</a>
+        {% endif %}
+    </p>
+
 
     {% if book['lang'] == "en-ru" %}
         <div>
@@ -237,18 +246,19 @@ def get_book(id):
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
     cur.execute("SELECT * FROM books WHERE id=?", (id,))
-    book = cur.fetchone()
+    row = cur.fetchone()
     conn.close()
-    if not book:
+    if not row:
         return None
     return {
-        "id": book["id"],
-        "title": book["title"],
-        "description": book["description"],
-        "author": book["author"],
-        "lang": book["lang"],
-        "bnf_path": book["bnf_path"],
-        "tags": get_tags_for_book(book["id"])
+        "id": row["id"],
+        "title": row["title"],
+        "author": row["author"],
+        "description": row["description"],
+        "lang": row["lang"],
+        "bnf_path": row["bnf_path"],
+        "favorite": row["favorite"],
+        "tags": get_tags_for_book(row["id"])
     }
 
 
@@ -424,9 +434,9 @@ def edit_book(book_id):
     tags = ", ".join(book["tags"])
     return render_template_string(EDIT_HTML, book=book, tags=tags)
 
+
 @app.route("/toggle_fav/<int:book_id>")
 def toggle_fav(book_id):
-    # переключаем флаг
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
     cur.execute("SELECT favorite FROM books WHERE id=?", (book_id,))
@@ -437,13 +447,16 @@ def toggle_fav(book_id):
         conn.commit()
     conn.close()
 
-    # возвращаем обратно к списку, сохраняя фильтры
-    q = request.args.get("q", "")
-    tag = request.args.get("tag", "")
-    author = request.args.get("author", "")
-    favorite = request.args.get("favorite", "")
-
-    return redirect(url_for("index", q=q, tag=tag, author=author, favorite=favorite))
+    # куда вернуться
+    back = request.args.get("from", "list")
+    if back == "book":
+        return redirect(url_for("view_book", book_id=book_id))
+    else:
+        q = request.args.get("q", "")
+        tag = request.args.get("tag", "")
+        author = request.args.get("author", "")
+        favorite = request.args.get("favorite", "")
+        return redirect(url_for("index", q=q, tag=tag, author=author, favorite=favorite))
 
 
 class StrictHeaderProcessor(HashHeaderProcessor):
