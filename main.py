@@ -150,9 +150,9 @@ class LibraryApp(tk.Tk):
 
         ttk.Button(top_frame, text="🔎", width=3, command=self.refresh_books).pack(side=tk.LEFT, padx=2)
         ttk.Button(top_frame, text="❌", width=3, command=self.reset_search).pack(side=tk.LEFT, padx=2)
-        ttk.Button(top_frame, text="Импорт .bnf", command=self.import_bnf).pack(side=tk.LEFT, padx=2)
+        #ttk.Button(top_frame, text="Импорт .bnf", command=self.import_bnf).pack(side=tk.LEFT, padx=2)
         ttk.Button(top_frame, text="Сканировать папку", command=self.scan_folder).pack(side=tk.LEFT, padx=2)
-        ttk.Button(top_frame, text="Экспорт CSV", command=self.export_csv).pack(side=tk.LEFT, padx=2)
+        #ttk.Button(top_frame, text="Экспорт CSV", command=self.export_csv).pack(side=tk.LEFT, padx=2)
 
         # Основная область
         main_frame = ttk.Frame(self)
@@ -176,7 +176,7 @@ class LibraryApp(tk.Tk):
             self.tree.column(col, width=width)
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.tree.bind("<<TreeviewSelect>>", self.show_details)
-        self.tree.bind("<Double-1>", self.open_bnf_file)
+        self.tree.bind("<Double-1>", self.open_metadata_dialog)
 
         # Скроллбар
         scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=self.tree.yview)
@@ -290,6 +290,88 @@ class LibraryApp(tk.Tk):
             self.details_text.insert(tk.END, "\n\n", "value")
 
             self.details_text.config(state="disabled")
+
+    def open_metadata_dialog(self, event):
+        sel = self.tree.selection()
+        if not sel:
+            return
+        book_id = self.tree.item(sel[0])["values"][0]
+        book = get_book(book_id)
+        if not book:
+            return
+
+        _, title, author, desc, lang, bnf_path = book
+        tags = get_tags_for_book(book_id)
+
+        dialog = tk.Toplevel(self)
+        dialog.title("Метаданные книги")
+        dialog.geometry("800x400")  # Увеличиваем высоту для многострочных полей
+        dialog.resizable(False, False)
+
+        main_frame = ttk.Frame(dialog, padding="10")
+        main_frame.pack(expand=True, fill=tk.BOTH)
+
+        # поля
+        tk.Label(dialog, text="Название").pack(anchor="w")
+        title_var = tk.StringVar(value=title)
+        tk.Entry(dialog, textvariable=title_var).pack(fill="x")
+
+        tk.Label(dialog, text="Автор").pack(anchor="w")
+        author_var = tk.StringVar(value=author)
+        tk.Entry(dialog, textvariable=author_var).pack(fill="x")
+
+        tk.Label(dialog, text="Описание").pack(anchor="w")
+        desc_text = tk.Text(dialog, height=5)
+        desc_text.insert("1.0", desc)
+        desc_text.pack(fill="both", expand=True)
+
+        tk.Label(dialog, text="Язык").pack(anchor="w")
+        lang_var = tk.StringVar(value=lang or "")
+        tk.Entry(dialog, textvariable=lang_var).pack(fill="x")
+
+        tk.Label(dialog, text="Теги (через запятую)").pack(anchor="w")
+        tags_var = tk.StringVar(value=", ".join(tags))
+        tk.Entry(dialog, textvariable=tags_var).pack(fill="x")
+
+        def save_changes():
+            new_title = title_var.get()
+            new_author = author_var.get()
+            new_desc = desc_text.get("1.0", "end").strip()
+            new_lang = lang_var.get().strip() or None
+            new_tags = [t.strip() for t in tags_var.get().split(",") if t.strip()]
+
+            # обновляем в БД
+            add_or_update_book(new_title, new_author, new_desc, new_lang, bnf_path, new_tags)
+
+            # обновляем bnf-файл
+            if bnf_path and os.path.exists(bnf_path):
+                try:
+                    with open(bnf_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    data.update({
+                        "title": new_title,
+                        "author": new_author,
+                        "description": new_desc,
+                        "lang": new_lang,
+                        "tags": new_tags
+                    })
+                    with open(bnf_path, "w", encoding="utf-8") as f:
+                        json.dump(data, f, ensure_ascii=False, indent=2)
+                except Exception as e:
+                    messagebox.showerror("Ошибка", f"Не удалось обновить .bnf: {e}")
+
+            self.refresh_books()
+            dialog.destroy()
+
+        # Кнопки
+        buttons_frame = ttk.Frame(dialog)
+        buttons_frame.pack(side=tk.BOTTOM, pady=10)
+
+        save_button = ttk.Button(buttons_frame, text="Сохранить", command=save_changes)
+        save_button.pack(side=tk.LEFT, padx=5)
+
+        cancel_button = ttk.Button(buttons_frame, text="Отмена", command=dialog.destroy)
+        cancel_button.pack(side=tk.LEFT, padx=5)
 
     def open_lang_file(self, folder, base_name, lang_code, paraline=False):
         if lang_code in ("ru", "en"):
