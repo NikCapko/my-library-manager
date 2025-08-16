@@ -237,6 +237,7 @@ def get_books(query=None, tag=None, author=None, sort="title", favorite=False):
         books.append({
             "id": row["id"],
             "title": row["title"],
+            "description": row["description"],
             "author": row["author"],
             "lang": row["lang"],
             "tags": get_tags_for_book(row["id"]),
