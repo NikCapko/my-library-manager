@@ -109,11 +109,13 @@ def get_books(filter_text=""):
             FROM books
             LEFT JOIN book_tags ON books.id = book_tags.book_id
             LEFT JOIN tags ON tags.id = book_tags.tag_id
-            WHERE books.title LIKE ? OR books.author LIKE ? OR tags.name LIKE ?
-            ORDER BY books.title
+            WHERE books.title LIKE ? COLLATE NOCASE
+               OR books.author LIKE ? COLLATE NOCASE
+               OR tags.name LIKE ? COLLATE NOCASE
+            ORDER BY books.title COLLATE NOCASE
         """, (f"%{filter_text}%", f"%{filter_text}%", f"%{filter_text}%"))
     else:
-        cur.execute("SELECT * FROM books ORDER BY title")
+        cur.execute("SELECT * FROM books ORDER BY title COLLATE NOCASE")
     rows = cur.fetchall()
     conn.close()
     return rows
@@ -167,10 +169,12 @@ class LibraryApp(tk.Tk):
         }
 
         self.tree = ttk.Treeview(main_frame, columns=("id", "author", "title", "description"), show="headings")
-        for col, text in zip(("id", "author", "title", "description"),
-                             ("ID", "Автор", "Название", "Описание")):
-            self.tree.heading(col, text=text)
-            self.tree.column(col)
+        self.sort_orders = {"author": True, "title": True}
+
+        self.tree.heading("id", text="ID")
+        self.tree.heading("author", text="Автор", command=lambda: self.sort_column("author"))
+        self.tree.heading("title", text="Название", command=lambda: self.sort_column("title"))
+        self.tree.heading("description", text="Описание")
         for col in self.tree["columns"]:
             width = column_widths.get(col, 10)
             self.tree.column(col, width=width)
@@ -191,9 +195,39 @@ class LibraryApp(tk.Tk):
         self.status_var = tk.StringVar(value="Готово")
         ttk.Label(self, textvariable=self.status_var, anchor="w").pack(fill=tk.X, side=tk.BOTTOM)
 
+    def sort_column(self, col):
+        # получаем все элементы
+        data = [(self.tree.set(k, col), k) for k in self.tree.get_children("")]
+        # сортируем
+        data.sort(reverse=not self.sort_orders[col])
+        for index, (val, k) in enumerate(data):
+            self.tree.move(k, "", index)
+        # меняем направление сортировки на противоположное
+        self.sort_orders[col] = not self.sort_orders[col]
+
     def reset_search(self):
         self.search_var.set("")
         self.refresh_books()
+
+    def search_by_author(self, author):
+        self.search_var.set(author)
+        self.tree.delete(*self.tree.get_children())
+
+        conn = sqlite3.connect(DB_FILE)
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT * FROM books
+            WHERE author=? COLLATE NOCASE
+            ORDER BY title COLLATE NOCASE
+        """, (author,))
+        books = cur.fetchall()
+        conn.close()
+
+        for book in books:
+            book_id, title, author, desc, lang, bnf_path = book
+            self.tree.insert("", tk.END, values=(book_id, author, title, desc))
+
+        self.status_var.set(f"Найдено книг автора '{author}': {len(books)}")
 
     def search_by_tag(self, tag):
         self.search_var.set(tag)  # чтобы пользователь видел, по чему фильтруем
@@ -204,8 +238,8 @@ class LibraryApp(tk.Tk):
             SELECT books.* FROM books
             JOIN book_tags ON books.id = book_tags.book_id
             JOIN tags ON tags.id = book_tags.tag_id
-            WHERE tags.name=?
-            ORDER BY books.title
+            WHERE tags.name=? COLLATE NOCASE
+            ORDER BY books.title COLLATE NOCASE
         """, (tag,))
         books = cur.fetchall()
         conn.close()
@@ -250,7 +284,13 @@ class LibraryApp(tk.Tk):
 
             # Автор
             self.details_text.insert(tk.END, "Автор: ", "label")
-            self.details_text.insert(tk.END, f"{author}\n", "value")
+            start_index = self.details_text.index(tk.INSERT)
+            self.details_text.insert(tk.END, f"{author}\n", "taglink")
+            # создаём уникальный тег для автора
+            tag_name = f"authorlink_{book_id}"
+            self.details_text.tag_add(tag_name, start_index, f"{start_index}+{len(author)}c")
+            self.details_text.tag_config(tag_name, foreground="blue", underline=True)
+            self.details_text.tag_bind(tag_name, "<Button-1>", lambda e, a=author: self.search_by_author(a))
 
             # Описание
             self.details_text.insert(tk.END, "\nОписание:\n", "label")
