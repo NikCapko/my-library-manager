@@ -72,6 +72,7 @@ BOOK_HTML = """
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
         <p><a href="/">Назад к списку</a></p>
+        <p><a href="/edit/{{ book['id'] }}">Редактировать</a></p>
     <title>{{ book['title'] }}</title>
     <style>
         body { font-family: sans-serif; margin: 20px; font-size: 16px; }
@@ -126,6 +127,50 @@ BOOK_HTML = """
 </html>
 """
 
+EDIT_HTML = """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Редактировать {{ book['title'] }}</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; font-size: 18px; }
+        label { display: block; margin-top: 10px; font-weight: bold; }
+        input, textarea, select { width: 100%; padding: 8px; margin-top: 5px; font-size: 16px; }
+        button { margin-top: 15px; padding: 8px 12px; font-size: 16px; }
+    </style>
+</head>
+<body>
+    <h1>Редактировать книгу</h1>
+    <form method="post">
+        <label>Название:</label>
+        <input type="text" name="title" value="{{ book['title'] }}">
+
+        <label>Автор:</label>
+        <input type="text" name="author" value="{{ book['author'] }}">
+
+        <label>Описание:</label>
+        <textarea name="description" rows="6">{{ book['description'] }}</textarea>
+
+        <label>Язык:</label>
+        <select name="lang">
+            <option value="ru" {% if book['lang']=="ru" %}selected{% endif %}>ru</option>
+            <option value="en" {% if book['lang']=="en" %}selected{% endif %}>en</option>
+            <option value="en-ru" {% if book['lang']=="en-ru" %}selected{% endif %}>en-ru</option>
+        </select>
+
+        <label>Теги (через запятую):</label>
+        <input type="text" name="tags" value="{{ tags }}">
+
+        <button type="submit">Сохранить</button>
+    </form>
+    <p><a href="/book/{{ book['id'] }}">Назад</a></p>
+</body>
+</html>
+"""
+
+
 # --- БД ---
 def get_books(query=None, tag=None, author=None, sort="title"):
     if sort not in ("title", "author"):
@@ -169,6 +214,7 @@ def get_books(query=None, tag=None, author=None, sort="title"):
         })
     return books
 
+
 def get_book(id):
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
@@ -211,6 +257,7 @@ def index():
     sort = request.args.get("sort", "title")  # по умолчанию сортируем по названию
     books = get_books(query=q if q else None, tag=tag if tag else None, author=author if author else None, sort=sort)
     return render_template_string(BASE_HTML, books=books, query=q, tag=tag, author=author, sort=sort)
+
 
 @app.route("/book/<int:book_id>")
 def view_book(book_id):
@@ -299,12 +346,53 @@ def view_book(book_id):
     return render_template_string(BOOK_HTML, book=book, content=content, parallel=parallel)
 
 
+@app.route("/edit/<int:book_id>", methods=["GET", "POST"])
+def edit_book(book_id):
+    book = get_book(book_id)
+    if not book:
+        abort(404)
+
+    if request.method == "POST":
+        title = request.form["title"].strip()
+        author = request.form["author"].strip()
+        description = request.form["description"].strip()
+        lang = request.form["lang"].strip()
+        tags = [t.strip() for t in request.form["tags"].split(",") if t.strip()]
+
+        conn = sqlite3.connect(DB_FILE)
+        cur = conn.cursor()
+        cur.execute("""
+                UPDATE books SET title=?, author=?, description=?, lang=?
+                WHERE id=?
+            """, (title, author, description, lang, book_id))
+        cur.execute("DELETE FROM book_tags WHERE book_id=?", (book_id,))
+        conn.commit()
+        conn.close()
+
+        for tag in tags:
+            conn = sqlite3.connect(DB_FILE)
+            cur = conn.cursor()
+            cur.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag,))
+            cur.execute("SELECT id FROM tags WHERE name=?", (tag,))
+            tag_id = cur.fetchone()[0]
+            cur.execute("INSERT INTO book_tags (book_id, tag_id) VALUES (?, ?)", (book_id, tag_id))
+            conn.commit()
+            conn.close()
+
+        return f"<meta http-equiv='refresh' content='0; url=/book/{book_id}'>"
+
+    tags = ", ".join(book["tags"])
+    return render_template_string(EDIT_HTML, book=book, tags=tags)
+
+
 class StrictHeaderProcessor(HashHeaderProcessor):
     """Обрабатывает только заголовки с пробелом после #"""
     RE = re.compile(r'(?:^|\n)(?P<level>#{1,6})\s+(?P<header>.*?)\s*#*(\n|$)')
 
+
 class StrictHeadersExtension(Extension):
     """Расширение для строгих заголовков"""
+
     def extendMarkdown(self, md):
         md.parser.blockprocessors.register(
             StrictHeaderProcessor(md.parser),
@@ -313,6 +401,7 @@ class StrictHeadersExtension(Extension):
         )
         # Удаляем стандартный процессор заголовков
         md.parser.blockprocessors.deregister('hashheader')
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
