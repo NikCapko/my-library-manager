@@ -359,12 +359,13 @@ def edit_book(book_id):
         lang = request.form["lang"].strip()
         tags = [t.strip() for t in request.form["tags"].split(",") if t.strip()]
 
+        # --- обновляем в БД ---
         conn = sqlite3.connect(DB_FILE)
         cur = conn.cursor()
         cur.execute("""
-                UPDATE books SET title=?, author=?, description=?, lang=?
-                WHERE id=?
-            """, (title, author, description, lang, book_id))
+            UPDATE books SET title=?, author=?, description=?, lang=?
+            WHERE id=?
+        """, (title, author, description, lang, book_id))
         cur.execute("DELETE FROM book_tags WHERE book_id=?", (book_id,))
         conn.commit()
         conn.close()
@@ -378,6 +379,25 @@ def edit_book(book_id):
             cur.execute("INSERT INTO book_tags (book_id, tag_id) VALUES (?, ?)", (book_id, tag_id))
             conn.commit()
             conn.close()
+
+        # --- обновляем .bnf файл ---
+        bnf_path = book["bnf_path"]
+        try:
+            import json
+            if os.path.exists(bnf_path):
+                with open(bnf_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            else:
+                data = {}
+            data["title"] = title
+            data["author"] = author
+            data["description"] = description
+            data["lang"] = lang
+            data["tags"] = tags
+            with open(bnf_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=4)
+        except Exception as e:
+            return f"<p>Ошибка при обновлении BNF: {e}</p>"
 
         return f"<meta http-equiv='refresh' content='0; url=/book/{book_id}'>"
 
