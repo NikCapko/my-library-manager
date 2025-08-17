@@ -40,6 +40,7 @@ BASE_HTML = """
         {% endif %}
         <a href="/?favorite=1" style="margin-left:10px;">Только избранные</a>
     </form>
+    <br>
     {% if tags %}
     <div style="margin:10px 0;">
       {% for t in tags %}
@@ -75,7 +76,7 @@ BASE_HTML = """
             <td>{{ book['description'] }}</td>
             <td>
                 {% for tag in book['tags'] %}
-                    <a href="/?{% for t in request.args.getlist('tag') %}tag={{t}}&{% endfor %}tag={{ tag }}" style="color:blue">{{ tag }}</a>
+                    <a href="/?{% for t in request.args.getlist('tag') %}tag={{t}}&{% endfor %}tag={{ tag }}" style="color:blue">{{ tag }},</a>
                 {% endfor %}
             </td>
         </tr>
