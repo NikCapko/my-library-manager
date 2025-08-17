@@ -356,16 +356,18 @@ class LibraryApp(tk.Tk):
             # Язык
             self.details_text.insert(tk.END, "\nЯзык: ", "label")
             if lang in ("ru", "en"):
-                self.details_text.insert(tk.END, lang, "taglink")
-                self.details_text.tag_bind("taglink", "<Button-1>",
+                langlink_name = f"langlink_{lang}"
+                self.details_text.insert(tk.END, lang, langlink_name)
+                self.details_text.tag_config(langlink_name, foreground="blue", underline=True)
+                self.details_text.tag_bind(langlink_name, "<Button-1>",
                                            lambda e, l=lang: self.open_file(folder, base_name))
             elif lang == "en-ru":
                 langs = [("ru", False), ("en", False), ("en-ru", True)]
                 for i, (l, use_paraline) in enumerate(langs):
-                    tag_name = f"langlink_{i}"
-                    self.details_text.insert(tk.END, l, tag_name)
-                    self.details_text.tag_config(tag_name, foreground="blue", underline=True)
-                    self.details_text.tag_bind(tag_name, "<Button-1>",
+                    langlink_name = f"langlink_{i}"
+                    self.details_text.insert(tk.END, l, langlink_name)
+                    self.details_text.tag_config(langlink_name, foreground="blue", underline=True)
+                    self.details_text.tag_bind(langlink_name, "<Button-1>",
                                                lambda e, ll=l, pp=use_paraline: self.open_lang_file(folder, base_name,
                                                                                                     ll, paraline=pp))
                     if i != len(langs) - 1:
@@ -375,10 +377,10 @@ class LibraryApp(tk.Tk):
             # --- Новое: кнопка "Открыть папку" ---
             if bnf_path and os.path.exists(bnf_path):
                 self.details_text.insert(tk.END, "Открыть папку\n", "taglink")
-                tag_name = f"openfolder_{book_id}"
-                self.details_text.tag_add(tag_name, "end-12c", "end")
-                self.details_text.tag_config(tag_name, foreground="blue", underline=True)
-                self.details_text.tag_bind(tag_name, "<Button-1>", lambda e, f=bnf_path: self.open_folder(f))
+                folder_name = f"openfolder_{book_id}"
+                self.details_text.tag_add(folder_name, "end-12c", "end")
+                self.details_text.tag_config(folder_name, foreground="blue", underline=True)
+                self.details_text.tag_bind(folder_name, "<Button-1>", lambda e, f=bnf_path: self.open_folder(f))
 
             self.details_text.config(state="disabled")
 
