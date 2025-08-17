@@ -40,7 +40,17 @@ BASE_HTML = """
         {% endif %}
         <a href="/?favorite=1" style="margin-left:10px;">Только избранные</a>
     </form>
-    <br>
+    {% if tags %}
+    <div style="margin:10px 0;">
+      {% for t in tags %}
+        <span style="display:inline-block; background:#e0e0e0; padding:5px 10px; margin:3px; border-radius:15px; font-size:14px;">
+          {{ t }}
+          <a href="/?{% for tt in tags if tt != t %}tag={{tt}}&{% endfor %}" 
+             style="margin-left:5px; color:red; text-decoration:none;">✕</a>
+        </span>
+      {% endfor %}
+    </div>
+    {% endif %}
     <table>
         <tr>
             <th>ID</th>
@@ -65,7 +75,7 @@ BASE_HTML = """
             <td>{{ book['description'] }}</td>
             <td>
                 {% for tag in book['tags'] %}
-                    <a href="/?tag={{ tag }}" class="tag">{{ tag }}</a>{% if not loop.last %}, {% endif %}
+                    <a href="/?{% for t in request.args.getlist('tag') %}tag={{t}}&{% endfor %}tag={{ tag }}" style="color:blue">{{ tag }}</a>
                 {% endfor %}
             </td>
         </tr>
@@ -113,9 +123,9 @@ BOOK_HTML = """
     <h1>{{ book['title'] }}</h1>
     <p><b>Автор:</b> <a href="/?author={{ book['author'] }}" style="color:blue">{{ book['author'] }}</a></p>
     <p><b>Теги:</b>
-        {% for tag in book['tags'] %}
-            <a href="/?tag={{ tag }}" style="color:blue">{{ tag }}</a>{% if not loop.last %}, {% endif %}
-        {% endfor %}
+      {% for tag in book['tags'] %}
+        <a href="/?{% for t in tags %}tag={{t}}&{% endfor %}tag={{ tag }}" style="color:blue">{{ tag }}</a>{% if not loop.last %}, {% endif %}
+      {% endfor %}
     </p>
     <p><b>Описание:</b></p>
     <div style="margin:10px 0; padding:10px; border:1px solid #ccc; background:#fafafa;">
@@ -196,6 +206,7 @@ EDIT_HTML = """
 # --- БД ---
 def connect():
     conn = sqlite3.connect(DB_FILE)
+
     # Универсальная регистронезависимая коллация (Unicode)
     def _cmp(a, b):
         a = "" if a is None else str(a)
@@ -203,12 +214,14 @@ def connect():
         aa = a.casefold()
         bb = b.casefold()
         return (aa > bb) - (aa < bb)  # -1, 0, 1
+
     conn.create_collation("UNI_NOCASE", _cmp)
     # На всякий случай функция для ручного приведения
     conn.create_function("UNI_LOWER", 1, lambda s: "" if s is None else str(s).casefold())
     return conn
 
-def get_books(query=None, tag=None, author=None, sort="title", favorite=False):
+
+def get_books(query=None, tags=None, author=None, sort="title", favorite=False):
     if sort not in ("title", "author"):
         sort = "title"
 
@@ -216,34 +229,47 @@ def get_books(query=None, tag=None, author=None, sort="title", favorite=False):
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
 
-    sql = "SELECT DISTINCT books.* FROM books "
-    joins = []
-    where = []
-    params = []
+    if tags and len(tags) > 0:
+        placeholders = ",".join("?" for _ in tags)
+        sql = f"""
+            SELECT books.* FROM books
+            JOIN book_tags ON books.id = book_tags.book_id
+            JOIN tags ON tags.id = book_tags.tag_id
+            WHERE tags.name IN ({placeholders})
+            GROUP BY books.id
+            HAVING COUNT(DISTINCT tags.name) = ?
+            ORDER BY books.{sort} COLLATE UNI_NOCASE
+        """
+        params = list(tags) + [len(tags)]
+        cur.execute(sql, tuple(params))
 
-    if tag:
-        joins.append("JOIN book_tags ON books.id = book_tags.book_id JOIN tags ON tags.id = book_tags.tag_id")
-        where.append("tags.name=?")
-        params.append(tag)
-    if author:
-        where.append("books.author = ? COLLATE UNI_NOCASE")
-        params.append(author)
-    if query:
-        joins.append("LEFT JOIN book_tags ON books.id = book_tags.book_id LEFT JOIN tags ON tags.id = book_tags.tag_id")
-        where.append(
-            "(UNI_LOWER(books.title) LIKE UNI_LOWER(?) OR UNI_LOWER(books.author) LIKE UNI_LOWER(?) OR UNI_LOWER(tags.name) LIKE UNI_LOWER(?))")
-        params += [f"%{query}%", f"%{query}%", f"%{query}%"]
-    if favorite:
-        where.append("books.favorite=1")
+    else:
+        # старый код для остальных случаев
+        sql = "SELECT DISTINCT books.* FROM books "
+        joins = []
+        where = []
+        params = []
 
-    if joins:
-        sql += " " + " ".join(joins)
-    if where:
-        sql += " WHERE " + " AND ".join(where)
+        if author:
+            where.append("books.author = ? COLLATE UNI_NOCASE")
+            params.append(author)
+        if query:
+            joins.append(
+                "LEFT JOIN book_tags ON books.id = book_tags.book_id LEFT JOIN tags ON tags.id = book_tags.tag_id")
+            where.append(
+                "(UNI_LOWER(books.title) LIKE UNI_LOWER(?) OR UNI_LOWER(books.author) LIKE UNI_LOWER(?) OR UNI_LOWER(tags.name) LIKE UNI_LOWER(?))")
+            params += [f"%{query}%", f"%{query}%", f"%{query}%"]
+        if favorite:
+            where.append("books.favorite=1")
 
-    sql += f" ORDER BY books.{sort} COLLATE UNI_NOCASE"
+        if joins:
+            sql += " " + " ".join(joins)
+        if where:
+            sql += " WHERE " + " AND ".join(where)
 
-    cur.execute(sql, tuple(params))
+        sql += f" ORDER BY books.{sort} COLLATE UNI_NOCASE"
+        cur.execute(sql, tuple(params))
+
     rows = cur.fetchall()
     conn.close()
 
@@ -304,26 +330,25 @@ def index():
     sort = request.args.get("sort", "title")
     favorite = request.args.get("favorite", "")
 
+    tags = request.args.getlist("tag")  # список выбранных тегов
     books = get_books(
         query=q if q else None,
-        tag=tag if tag else None,
+        tags=tags if tags else None,
         author=author if author else None,
         sort=sort,
         favorite=(favorite == "1")
     )
 
-    resp = make_response(render_template_string(
+    return make_response(render_template_string(
         BASE_HTML,
         books=books,
         query=q,
-        tag=tag,
+        tags=tags,
         author=author,
         sort=sort,
         favorite=(favorite == "1")
     ))
-    # 🔥 отключаем кэш для списка
-    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    return resp
+
 
 @app.route("/book/<int:book_id>")
 def view_book(book_id):
