@@ -603,3 +603,5 @@ if __name__ == "__main__":
     init_db()
     app = LibraryApp()
     app.mainloop()
+    style = ttk.Style()
+    style.theme_use("clam")
