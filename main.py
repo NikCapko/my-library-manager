@@ -3,6 +3,7 @@ import json
 import os
 import sqlite3
 import subprocess
+import sys
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
@@ -12,6 +13,7 @@ DB_FILE = "library.db"
 # --- Работа с БД ---
 def connect():
     conn = sqlite3.connect(DB_FILE)
+
     # Универсальная регистронезависимая коллация (Unicode)
     def _cmp(a, b):
         a = "" if a is None else str(a)
@@ -19,6 +21,7 @@ def connect():
         aa = a.casefold()
         bb = b.casefold()
         return (aa > bb) - (aa < bb)  # -1, 0, 1
+
     conn.create_collation("UNI_NOCASE", _cmp)
     # На всякий случай функция для ручного приведения
     conn.create_function("UNI_LOWER", 1, lambda s: "" if s is None else str(s).casefold())
@@ -309,8 +312,8 @@ class LibraryApp(tk.Tk):
         if book:
             _, title, author, desc, lang, bnf_path, favorite = book
             tags = get_tags_for_book(book_id)
-            folder = os.path.dirname(bnf_path)
-            base_name = os.path.splitext(os.path.basename(bnf_path))[0]
+            folder = os.path.dirname(bnf_path) if bnf_path else None
+            base_name = os.path.splitext(os.path.basename(bnf_path))[0] if bnf_path else None
 
             self.details_text.config(state="normal")
             self.details_text.delete(1.0, tk.END)
@@ -324,11 +327,10 @@ class LibraryApp(tk.Tk):
             self.details_text.insert(tk.END, "Название: ", "label")
             self.details_text.insert(tk.END, f"{title}\n", "value")
 
-            # Автор
+            # Автор (ссылка)
             self.details_text.insert(tk.END, "Автор: ", "label")
             start_index = self.details_text.index(tk.INSERT)
             self.details_text.insert(tk.END, f"{author}\n", "taglink")
-            # создаём уникальный тег для автора
             tag_name = f"authorlink_{book_id}"
             self.details_text.tag_add(tag_name, start_index, f"{start_index}+{len(author)}c")
             self.details_text.tag_config(tag_name, foreground="blue", underline=True)
@@ -343,11 +345,10 @@ class LibraryApp(tk.Tk):
             for i, tag in enumerate(tags):
                 start_index = self.details_text.index(tk.INSERT)
                 self.details_text.insert(tk.END, tag, "taglink")
-                # Создаем уникальное имя тега для каждой ссылки
-                tag_name = f"taglink_{i}"
-                self.details_text.tag_add(tag_name, f"end-{len(tag) + 1}c", "end")
+                tag_name = f"taglink_{book_id}_{i}"
+                self.details_text.tag_add(tag_name, f"end-{len(tag)}c", "end")
+                self.details_text.tag_config(tag_name, foreground="blue", underline=True)
                 self.details_text.tag_bind(tag_name, "<Button-1>", lambda e, t=tag: self.search_by_tag(t))
-
                 if i != len(tags) - 1:
                     self.details_text.insert(tk.END, ", ", "value")
             self.details_text.insert(tk.END, "\n", "value")
@@ -371,7 +372,36 @@ class LibraryApp(tk.Tk):
                         self.details_text.insert(tk.END, ", ", "value")
             self.details_text.insert(tk.END, "\n\n", "value")
 
+            # --- Новое: кнопка "Открыть папку" ---
+            if bnf_path and os.path.exists(bnf_path):
+                self.details_text.insert(tk.END, "Открыть папку\n", "taglink")
+                tag_name = f"openfolder_{book_id}"
+                self.details_text.tag_add(tag_name, "end-12c", "end")
+                self.details_text.tag_config(tag_name, foreground="blue", underline=True)
+                self.details_text.tag_bind(tag_name, "<Button-1>", lambda e, f=bnf_path: self.open_folder(f))
+
             self.details_text.config(state="disabled")
+
+    def open_folder(self, file_path):
+        folder = os.path.dirname(file_path)
+        try:
+            if os.name == "nt":  # Windows
+                subprocess.Popen(["explorer", "/select,", file_path])
+            elif sys.platform == "darwin":  # macOS
+                subprocess.Popen(["open", "-R", file_path])
+            else:  # Linux
+                # пытаемся разные менеджеры
+                for fm in ["nautilus", "dolphin", "thunar", "pcmanfm"]:
+                    if subprocess.call(["which", fm], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0:
+                        if fm in ("nautilus", "dolphin"):
+                            subprocess.Popen([fm, "--select", file_path])
+                        else:
+                            subprocess.Popen([fm, file_path])
+                        return
+                # fallback — просто открыть папку
+                subprocess.Popen(["xdg-open", folder])
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось открыть папку: {e}")
 
     def open_metadata_dialog(self, event):
         sel = self.tree.selection()
@@ -472,7 +502,7 @@ class LibraryApp(tk.Tk):
             if paraline:
                 subprocess.Popen(["/home/nikolay/bin/paraline", file_path])
             else:
-                subprocess.Popen(["mousepad", file_path])
+                subprocess.Popen(["ghostwriter", file_path])
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
 
@@ -485,7 +515,7 @@ class LibraryApp(tk.Tk):
             return
 
         try:
-            subprocess.Popen(["mousepad", file_path])
+            subprocess.Popen(["ghostwriter", file_path])
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
 
