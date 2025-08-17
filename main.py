@@ -10,8 +10,23 @@ DB_FILE = "library.db"
 
 
 # --- Работа с БД ---
-def init_db():
+def connect():
     conn = sqlite3.connect(DB_FILE)
+    # Универсальная регистронезависимая коллация (Unicode)
+    def _cmp(a, b):
+        a = "" if a is None else str(a)
+        b = "" if b is None else str(b)
+        aa = a.casefold()
+        bb = b.casefold()
+        return (aa > bb) - (aa < bb)  # -1, 0, 1
+    conn.create_collation("UNI_NOCASE", _cmp)
+    # На всякий случай функция для ручного приведения
+    conn.create_function("UNI_LOWER", 1, lambda s: "" if s is None else str(s).casefold())
+    return conn
+
+
+def init_db():
+    conn = connect()
     cur = conn.cursor()
     cur.execute("""
         CREATE TABLE IF NOT EXISTS books (
@@ -44,7 +59,7 @@ def init_db():
 
 
 def find_book_id(title, author):
-    conn = sqlite3.connect(DB_FILE)
+    conn = connect()
     cur = conn.cursor()
     cur.execute("SELECT id FROM books WHERE title=? AND author=?", (title, author))
     row = cur.fetchone()
@@ -53,7 +68,7 @@ def find_book_id(title, author):
 
 
 def save_tags(book_id, tags):
-    conn = sqlite3.connect(DB_FILE)
+    conn = connect()
     cur = conn.cursor()
     for tag in tags:
         tag = tag.strip()
@@ -68,7 +83,7 @@ def save_tags(book_id, tags):
 
 
 def get_tags_for_book(book_id):
-    conn = sqlite3.connect(DB_FILE)
+    conn = connect()
     cur = conn.cursor()
     cur.execute("""
         SELECT name FROM tags
@@ -82,7 +97,7 @@ def get_tags_for_book(book_id):
 
 def add_or_update_book(title, author, description, lang=None, bnf_path=None, tags=None):
     book_id = find_book_id(title, author)
-    conn = sqlite3.connect(DB_FILE)
+    conn = connect()
     cur = conn.cursor()
     if book_id:
         cur.execute("""
@@ -102,28 +117,29 @@ def add_or_update_book(title, author, description, lang=None, bnf_path=None, tag
 
 
 def get_books(filter_text=""):
-    conn = sqlite3.connect(DB_FILE)
+    conn = connect()
     cur = conn.cursor()
     if filter_text:
+        f = filter_text.casefold()
         cur.execute("""
             SELECT DISTINCT books.*
             FROM books
             LEFT JOIN book_tags ON books.id = book_tags.book_id
             LEFT JOIN tags ON tags.id = book_tags.tag_id
-            WHERE books.title LIKE ? COLLATE NOCASE
-               OR books.author LIKE ? COLLATE NOCASE
-               OR tags.name LIKE ? COLLATE NOCASE
-            ORDER BY books.title COLLATE NOCASE
-        """, (f"%{filter_text}%", f"%{filter_text}%", f"%{filter_text}%"))
+            WHERE UNI_LOWER(books.title)  LIKE UNI_LOWER(?)
+               OR UNI_LOWER(books.author) LIKE UNI_LOWER(?)
+               OR UNI_LOWER(tags.name)    LIKE UNI_LOWER(?)
+            ORDER BY UNI_LOWER(books.title)
+        """, (f"%{f}%", f"%{f}%", f"%{f}%"))
     else:
-        cur.execute("SELECT * FROM books ORDER BY title COLLATE NOCASE")
+        cur.execute("SELECT * FROM books ORDER BY UNI_LOWER(title)")
     rows = cur.fetchall()
     conn.close()
     return rows
 
 
 def get_book(id):
-    conn = sqlite3.connect(DB_FILE)
+    conn = connect()
     cur = conn.cursor()
     cur.execute("SELECT * FROM books WHERE id=?", (id,))
     book = cur.fetchone()
@@ -213,13 +229,12 @@ class LibraryApp(tk.Tk):
     def search_by_author(self, author):
         self.search_var.set(author)
         self.tree.delete(*self.tree.get_children())
-
-        conn = sqlite3.connect(DB_FILE)
+        conn = connect()
         cur = conn.cursor()
         cur.execute("""
             SELECT * FROM books
-            WHERE author=? COLLATE NOCASE
-            ORDER BY title COLLATE NOCASE
+            WHERE UNI_LOWER(author) = UNI_LOWER(?)
+            ORDER BY UNI_LOWER(title)
         """, (author,))
         books = cur.fetchall()
         conn.close()
@@ -231,16 +246,16 @@ class LibraryApp(tk.Tk):
         self.status_var.set(f"Найдено книг автора '{author}': {len(books)}")
 
     def search_by_tag(self, tag):
-        self.search_var.set(tag)  # чтобы пользователь видел, по чему фильтруем
+        self.search_var.set(tag)
         self.tree.delete(*self.tree.get_children())
-        conn = sqlite3.connect(DB_FILE)
+        conn = connect()
         cur = conn.cursor()
         cur.execute("""
             SELECT books.* FROM books
             JOIN book_tags ON books.id = book_tags.book_id
             JOIN tags ON tags.id = book_tags.tag_id
-            WHERE tags.name=? COLLATE NOCASE
-            ORDER BY books.title COLLATE NOCASE
+            WHERE UNI_LOWER(tags.name) = UNI_LOWER(?)
+            ORDER BY UNI_LOWER(books.title)
         """, (tag,))
         books = cur.fetchall()
         conn.close()
@@ -250,6 +265,32 @@ class LibraryApp(tk.Tk):
             self.tree.insert("", tk.END, values=(book_id, author, title, desc))
 
         self.status_var.set(f"Найдено книг с тегом '{tag}': {len(books)}")
+
+    def find_book_id(title, author):
+        conn = connect()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id FROM books
+            WHERE UNI_LOWER(title)  = UNI_LOWER(?)
+              AND UNI_LOWER(author) = UNI_LOWER(?)
+        """, (title, author))
+        row = cur.fetchone()
+        conn.close()
+        return row[0] if row else None
+
+    def sort_column(self, col):
+        data = [(self.tree.set(k, col), k) for k in self.tree.get_children("")]
+
+        def key_fn(item):
+            val = item[0]
+            if val is None:
+                return ""
+            return str(val).casefold()
+
+        data.sort(key=key_fn, reverse=not self.sort_orders[col])
+        for index, (_, k) in enumerate(data):
+            self.tree.move(k, "", index)
+        self.sort_orders[col] = not self.sort_orders[col]
 
     def refresh_books(self):
         self.tree.delete(*self.tree.get_children())
@@ -341,7 +382,7 @@ class LibraryApp(tk.Tk):
         if not book:
             return
 
-        _, title, author, desc, lang, bnf_path = book
+        _, title, author, desc, lang, bnf_path, favorite = book
         tags = get_tags_for_book(book_id)
 
         dialog = tk.Toplevel(self)

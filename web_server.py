@@ -194,11 +194,25 @@ EDIT_HTML = """
 
 
 # --- БД ---
+def connect():
+    conn = sqlite3.connect(DB_FILE)
+    # Универсальная регистронезависимая коллация (Unicode)
+    def _cmp(a, b):
+        a = "" if a is None else str(a)
+        b = "" if b is None else str(b)
+        aa = a.casefold()
+        bb = b.casefold()
+        return (aa > bb) - (aa < bb)  # -1, 0, 1
+    conn.create_collation("UNI_NOCASE", _cmp)
+    # На всякий случай функция для ручного приведения
+    conn.create_function("UNI_LOWER", 1, lambda s: "" if s is None else str(s).casefold())
+    return conn
+
 def get_books(query=None, tag=None, author=None, sort="title", favorite=False):
     if sort not in ("title", "author"):
         sort = "title"
 
-    conn = sqlite3.connect(DB_FILE)
+    conn = connect()
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
 
@@ -212,11 +226,12 @@ def get_books(query=None, tag=None, author=None, sort="title", favorite=False):
         where.append("tags.name=?")
         params.append(tag)
     if author:
-        where.append("books.author=?")
+        where.append("books.author = ? COLLATE UNI_NOCASE")
         params.append(author)
     if query:
         joins.append("LEFT JOIN book_tags ON books.id = book_tags.book_id LEFT JOIN tags ON tags.id = book_tags.tag_id")
-        where.append("(books.title LIKE ? OR books.author LIKE ? OR tags.name LIKE ?)")
+        where.append(
+            "(UNI_LOWER(books.title) LIKE UNI_LOWER(?) OR UNI_LOWER(books.author) LIKE UNI_LOWER(?) OR UNI_LOWER(tags.name) LIKE UNI_LOWER(?))")
         params += [f"%{query}%", f"%{query}%", f"%{query}%"]
     if favorite:
         where.append("books.favorite=1")
@@ -226,7 +241,7 @@ def get_books(query=None, tag=None, author=None, sort="title", favorite=False):
     if where:
         sql += " WHERE " + " AND ".join(where)
 
-    sql += f" ORDER BY books.{sort}"
+    sql += f" ORDER BY books.{sort} COLLATE UNI_NOCASE"
 
     cur.execute(sql, tuple(params))
     rows = cur.fetchall()
@@ -247,7 +262,7 @@ def get_books(query=None, tag=None, author=None, sort="title", favorite=False):
 
 
 def get_book(id):
-    conn = sqlite3.connect(DB_FILE)
+    conn = connect()
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
     cur.execute("SELECT * FROM books WHERE id=?", (id,))
@@ -268,7 +283,7 @@ def get_book(id):
 
 
 def get_tags_for_book(book_id):
-    conn = sqlite3.connect(DB_FILE)
+    conn = connect()
     cur = conn.cursor()
     cur.execute("""
         SELECT name FROM tags
@@ -418,7 +433,7 @@ def edit_book(book_id):
         tags = [t.strip() for t in request.form["tags"].split(",") if t.strip()]
 
         # --- обновляем в БД ---
-        conn = sqlite3.connect(DB_FILE)
+        conn = connect()
         cur = conn.cursor()
         cur.execute("""
             UPDATE books SET title=?, author=?, description=?, lang=?
@@ -429,7 +444,7 @@ def edit_book(book_id):
         conn.close()
 
         for tag in tags:
-            conn = sqlite3.connect(DB_FILE)
+            conn = connect()
             cur = conn.cursor()
             cur.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag,))
             cur.execute("SELECT id FROM tags WHERE name=?", (tag,))
@@ -465,7 +480,7 @@ def edit_book(book_id):
 
 @app.route("/toggle_fav/<int:book_id>")
 def toggle_fav(book_id):
-    conn = sqlite3.connect(DB_FILE)
+    conn = connect()
     cur = conn.cursor()
     cur.execute("SELECT favorite FROM books WHERE id=?", (book_id,))
     row = cur.fetchone()
