@@ -158,6 +158,7 @@ class LibraryApp(tk.Tk):
         self.geometry("900x600")
 
         self.create_widgets()
+        self.check_db_files_exist()
         self.refresh_books()
 
     def create_widgets(self):
@@ -294,6 +295,23 @@ class LibraryApp(tk.Tk):
         for index, (_, k) in enumerate(data):
             self.tree.move(k, "", index)
         self.sort_orders[col] = not self.sort_orders[col]
+
+    def check_db_files_exist(self):
+        """Удаляем из БД записи, у которых нет .bnf файла"""
+        conn = connect()
+        cur = conn.cursor()
+        cur.execute("SELECT id, bnf_path FROM books")
+        rows = cur.fetchall()
+
+        deleted = 0
+        for book_id, path in rows:
+            if not os.path.exists(path):
+                cur.execute("DELETE FROM books WHERE id=?", (book_id,))
+                deleted += 1
+
+        if deleted:
+            conn.commit()
+            print(f"Удалено {deleted} записей без файлов.")
 
     def refresh_books(self):
         self.tree.delete(*self.tree.get_children())
@@ -586,6 +604,7 @@ class LibraryApp(tk.Tk):
                             count += 1
                         except:
                             pass
+            self.check_db_files_exist()
             self.refresh_books()
             messagebox.showinfo("Сканирование", f"Добавлено или обновлено {count} книг")
 
