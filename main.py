@@ -53,6 +53,9 @@ def init_db():
     )
     """)
     cur.execute("""
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_books_author_title ON books(UNI_LOWER(author), UNI_LOWER(title));
+    """)
+    cur.execute("""
     CREATE TABLE IF NOT EXISTS book_tags (
         book_id INTEGER,
         tag_id INTEGER,

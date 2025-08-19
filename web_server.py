@@ -553,7 +553,6 @@ class StrictHeadersExtension(Extension):
 
 
 def handle_file_event(path):
-    """Добавить или обновить книгу по файлу (ориентируясь на автора и название)"""
     if not path.endswith(".bnf"):
         return
     try:
@@ -574,33 +573,25 @@ def handle_file_event(path):
         return
 
     conn = connect()
-    conn.row_factory = sqlite3.Row
     cur = conn.cursor()
 
-    # ищем книгу по author+title (регистронезависимо)
+    # upsert (работает одинаково на Linux и macOS)
     cur.execute("""
-        SELECT id FROM books 
-        WHERE UNI_LOWER(author)=UNI_LOWER(?) 
-          AND UNI_LOWER(title)=UNI_LOWER(?)
-    """, (author, title))
-    row = cur.fetchone()
+        INSERT INTO books (title, author, description, lang, bnf_path)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(UNI_LOWER(author), UNI_LOWER(title))
+        DO UPDATE SET description=excluded.description,
+                      lang=excluded.lang,
+                      bnf_path=excluded.bnf_path
+    """, (title, author, description, lang, path))
 
-    if row:
-        book_id = row["id"]
-        # ✅ обновляем запись, ID сохраняется
-        cur.execute("""UPDATE books 
-                       SET description=?, lang=?, bnf_path=? 
-                       WHERE id=?""",
-                    (description, lang, path, book_id))
-        cur.execute("DELETE FROM book_tags WHERE book_id=?", (book_id,))
-    else:
-        # ✅ добавляем новую запись
-        cur.execute("""INSERT INTO books (title, author, description, lang, bnf_path) 
-                       VALUES (?,?,?,?,?)""",
-                    (title, author, description, lang, path))
-        book_id = cur.lastrowid
+    # получаем id записи (новой или обновлённой)
+    cur.execute("SELECT id FROM books WHERE UNI_LOWER(author)=UNI_LOWER(?) AND UNI_LOWER(title)=UNI_LOWER(?)",
+                (author, title))
+    book_id = cur.fetchone()[0]
 
     # обновляем теги
+    cur.execute("DELETE FROM book_tags WHERE book_id=?", (book_id,))
     for tag in tags:
         cur.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag,))
         cur.execute("SELECT id FROM tags WHERE name=?", (tag,))
@@ -619,6 +610,7 @@ def find_book_id(title, author):
     row = cur.fetchone()
     conn.close()
     return row[0] if row else None
+
 
 def remove_book_from_db(path):
     """Удалить запись о книге, если удалён .bnf"""
