@@ -575,7 +575,7 @@ def handle_file_event(path):
                     (author, title))
         row = cur.fetchone()
         if row:
-            book_id = row["id"]
+            book_id = find_book_id(title, author)
             # обновляем данные
             cur.execute("""UPDATE books 
                            SET description=?, lang=?, bnf_path=? 
@@ -600,6 +600,13 @@ def handle_file_event(path):
         conn.close()
         print(f"Обновлена книга: {title} ({author})")
 
+def find_book_id(title, author):
+    conn = connect()
+    cur = conn.cursor()
+    cur.execute("SELECT id FROM books WHERE title=? AND author=?", (title, author))
+    row = cur.fetchone()
+    conn.close()
+    return row[0] if row else None
 
 def remove_book_from_db(path):
     """Удалить запись о книге, если удалён .bnf"""
