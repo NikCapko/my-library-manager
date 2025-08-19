@@ -8,8 +8,9 @@ import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
+
+from library_watcher import LibraryWatcher
 
 DB_FILE = "library.db"
 
@@ -224,11 +225,6 @@ class LibraryApp(tk.Tk):
         # Статус-бар
         self.status_var = tk.StringVar(value="Готово")
         ttk.Label(self, textvariable=self.status_var, anchor="w").pack(fill=tk.X, side=tk.BOTTOM)
-
-    def on_files_changed(self):
-        """Коллбек, вызываемый при изменениях в папке"""
-        print("Изменения в папке, обновляем библиотеку...")
-        self.scan_folder(self.library_path)
 
     def start_watcher(self):
         """Запуск watchdog в отдельном потоке"""
@@ -645,25 +641,6 @@ class LibraryApp(tk.Tk):
                     tags = ", ".join(get_tags_for_book(book[0]))
                     writer.writerow(list(book) + [tags])
             messagebox.showinfo("Экспорт", f"Экспортировано в {filepath}")
-
-
-class LibraryWatcher(FileSystemEventHandler):
-    """Класс, который реагирует на изменения файлов"""
-
-    def __init__(self, app):
-        self.app = app
-
-    def on_modified(self, event):
-        if not event.is_directory:
-            self.app.on_files_changed()
-
-    def on_created(self, event):
-        if not event.is_directory:
-            self.app.on_files_changed()
-
-    def on_deleted(self, event):
-        if not event.is_directory:
-            self.app.on_files_changed()
 
 
 if __name__ == "__main__":

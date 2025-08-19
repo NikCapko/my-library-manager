@@ -8,8 +8,9 @@ from flask import Flask, render_template_string, request, abort, redirect, url_f
 from markdown import Extension
 from markdown.blockprocessors import HashHeaderProcessor
 from markdown.extensions.toc import TocExtension
-from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
+
+from library_watcher import LibraryWatcher
 
 DB_FILE = "library.db"
 
@@ -475,9 +476,9 @@ def edit_book(book_id):
         conn.commit()
         conn.close()
 
+        conn = connect()
+        cur = conn.cursor()
         for tag in tags:
-            conn = connect()
-            cur = conn.cursor()
             cur.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag,))
             cur.execute("SELECT id FROM tags WHERE name=?", (tag,))
             tag_id = cur.fetchone()[0]
@@ -552,77 +553,6 @@ class StrictHeadersExtension(Extension):
         md.parser.blockprocessors.deregister('hashheader')
 
 
-def handle_file_event(path):
-    if not path.endswith(".bnf"):
-        return
-    try:
-        import json
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        title = data.get("title", "").strip()
-        author = data.get("author", "").strip()
-        description = data.get("description", "").strip()
-        lang = data.get("lang", "ru")
-        tags = data.get("tags", [])
-    except Exception as e:
-        print(f"Ошибка при чтении {path}: {e}")
-        return
-
-    if not title or not author:
-        print(f"Пропуск файла {path}: нет title/author")
-        return
-
-    conn = connect()
-    cur = conn.cursor()
-
-    # upsert (работает одинаково на Linux и macOS)
-    cur.execute("""
-        INSERT INTO books (title, author, description, lang, bnf_path)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(UNI_LOWER(author), UNI_LOWER(title))
-        DO UPDATE SET description=excluded.description,
-                      lang=excluded.lang,
-                      bnf_path=excluded.bnf_path
-    """, (title, author, description, lang, path))
-
-    # получаем id записи (новой или обновлённой)
-    cur.execute("SELECT id FROM books WHERE UNI_LOWER(author)=UNI_LOWER(?) AND UNI_LOWER(title)=UNI_LOWER(?)",
-                (author, title))
-    book_id = cur.fetchone()[0]
-
-    # обновляем теги
-    cur.execute("DELETE FROM book_tags WHERE book_id=?", (book_id,))
-    for tag in tags:
-        cur.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag,))
-        cur.execute("SELECT id FROM tags WHERE name=?", (tag,))
-        tag_id = cur.fetchone()[0]
-        cur.execute("INSERT INTO book_tags (book_id, tag_id) VALUES (?,?)", (book_id, tag_id))
-
-    conn.commit()
-    conn.close()
-    print(f"Обновлена книга: {title} ({author})")
-
-
-def find_book_id(title, author):
-    conn = connect()
-    cur = conn.cursor()
-    cur.execute("SELECT id FROM books WHERE title=? AND author=?", (title, author))
-    row = cur.fetchone()
-    conn.close()
-    return row[0] if row else None
-
-
-def remove_book_from_db(path):
-    """Удалить запись о книге, если удалён .bnf"""
-    if path.endswith(".bnf"):
-        conn = connect()
-        cur = conn.cursor()
-        cur.execute("DELETE FROM books WHERE bnf_path=?", (path,))
-        conn.commit()
-        conn.close()
-        print(f"Удалена книга из БД (файл {path})")
-
-
 def start_watcher():
     event_handler = LibraryWatcher()
     observer = Observer()
@@ -635,20 +565,6 @@ def start_watcher():
     t = threading.Thread(target=lambda: observer.join())
     t.daemon = True
     t.start()
-
-
-class LibraryWatcher(FileSystemEventHandler):
-    def on_created(self, event):
-        if not event.is_directory:
-            handle_file_event(event.src_path)
-
-    def on_deleted(self, event):
-        if not event.is_directory:
-            remove_book_from_db(event.src_path)
-
-    def on_modified(self, event):
-        if not event.is_directory:
-            handle_file_event(event.src_path)
 
 
 if __name__ == "__main__":
