@@ -55,7 +55,7 @@ def add_or_update_book(title, author, description, lang=None, bnf_path=None, tag
     else:
         print("creating new book")
         cur.execute("""
-            INSERT INTO books (title, author, description, lang, bnf_path)
+            INSERT OR IGNORE INTO books (title, author, description, lang, bnf_path)
             VALUES (?, ?, ?, ?, ?)
         """, (title, author, description, lang, bnf_path))
         book_id = cur.lastrowid

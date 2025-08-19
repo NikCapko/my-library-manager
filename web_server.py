@@ -483,8 +483,9 @@ def edit_book(book_id):
             cur.execute("SELECT id FROM tags WHERE name=?", (tag,))
             tag_id = cur.fetchone()[0]
             cur.execute("INSERT INTO book_tags (book_id, tag_id) VALUES (?, ?)", (book_id, tag_id))
-            conn.commit()
-            conn.close()
+        
+        conn.commit()
+        conn.close()
 
         # --- обновляем .bnf файл ---
         bnf_path = book["bnf_path"]

@@ -54,6 +54,9 @@ def init_db():
     )
     """)
     cur.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_books_author_title ON books (author, title)
+    """)
+    cur.execute("""
     CREATE TABLE IF NOT EXISTS book_tags (
         book_id INTEGER,
         tag_id INTEGER,
@@ -228,7 +231,7 @@ class LibraryApp(tk.Tk):
 
     def start_watcher(self):
         """Запуск watchdog в отдельном потоке"""
-        event_handler = LibraryWatcher(self)
+        event_handler = LibraryWatcher()
         self.observer = Observer()
         self.observer.schedule(event_handler, self.library_path, recursive=True)
         self.observer_thread = threading.Thread(target=self.observer.start, daemon=True)
