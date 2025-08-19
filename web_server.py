@@ -554,51 +554,63 @@ class StrictHeadersExtension(Extension):
 
 def handle_file_event(path):
     """Добавить или обновить книгу по файлу (ориентируясь на автора и название)"""
-    if path.endswith(".bnf"):
-        try:
-            import json
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            title = data.get("title", "").strip()
-            author = data.get("author", "").strip()
-            description = data.get("description", "").strip()
-            lang = data.get("lang", "ru")
-            tags = data.get("tags", [])
-        except Exception as e:
-            print(f"Ошибка при чтении {path}: {e}")
-            return
+    if not path.endswith(".bnf"):
+        return
+    try:
+        import json
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        title = data.get("title", "").strip()
+        author = data.get("author", "").strip()
+        description = data.get("description", "").strip()
+        lang = data.get("lang", "ru")
+        tags = data.get("tags", [])
+    except Exception as e:
+        print(f"Ошибка при чтении {path}: {e}")
+        return
 
-        conn = connect()
-        cur = conn.cursor()
-        # ищем книгу по автору и названию (регистронезависимо)
-        cur.execute("SELECT id FROM books WHERE author=? COLLATE UNI_NOCASE AND title=? COLLATE UNI_NOCASE",
-                    (author, title))
-        row = cur.fetchone()
-        if row:
-            book_id = find_book_id(title, author)
-            # обновляем данные
-            cur.execute("""UPDATE books 
-                           SET description=?, lang=?, bnf_path=? 
-                           WHERE id=?""",
-                        (description, lang, path, book_id))
-            cur.execute("DELETE FROM book_tags WHERE book_id=?", (book_id,))
-        else:
-            # вставляем новую книгу
-            cur.execute("""INSERT INTO books (title, author, description, lang, bnf_path) 
-                           VALUES (?,?,?,?,?)""",
-                        (title, author, description, lang, path))
-            book_id = cur.lastrowid
+    if not title or not author:
+        print(f"Пропуск файла {path}: нет title/author")
+        return
 
-        # обновляем теги
-        for tag in tags:
-            cur.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag,))
-            cur.execute("SELECT id FROM tags WHERE name=?", (tag,))
-            tag_id = cur.fetchone()[0]
-            cur.execute("INSERT INTO book_tags (book_id, tag_id) VALUES (?,?)", (book_id, tag_id))
+    conn = connect()
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
 
-        conn.commit()
-        conn.close()
-        print(f"Обновлена книга: {title} ({author})")
+    # ищем книгу по author+title (регистронезависимо)
+    cur.execute("""
+        SELECT id FROM books 
+        WHERE UNI_LOWER(author)=UNI_LOWER(?) 
+          AND UNI_LOWER(title)=UNI_LOWER(?)
+    """, (author, title))
+    row = cur.fetchone()
+
+    if row:
+        book_id = row["id"]
+        # ✅ обновляем запись, ID сохраняется
+        cur.execute("""UPDATE books 
+                       SET description=?, lang=?, bnf_path=? 
+                       WHERE id=?""",
+                    (description, lang, path, book_id))
+        cur.execute("DELETE FROM book_tags WHERE book_id=?", (book_id,))
+    else:
+        # ✅ добавляем новую запись
+        cur.execute("""INSERT INTO books (title, author, description, lang, bnf_path) 
+                       VALUES (?,?,?,?,?)""",
+                    (title, author, description, lang, path))
+        book_id = cur.lastrowid
+
+    # обновляем теги
+    for tag in tags:
+        cur.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag,))
+        cur.execute("SELECT id FROM tags WHERE name=?", (tag,))
+        tag_id = cur.fetchone()[0]
+        cur.execute("INSERT INTO book_tags (book_id, tag_id) VALUES (?,?)", (book_id, tag_id))
+
+    conn.commit()
+    conn.close()
+    print(f"Обновлена книга: {title} ({author})")
+
 
 def find_book_id(title, author):
     conn = connect()
