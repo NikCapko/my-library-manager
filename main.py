@@ -4,8 +4,12 @@ import os
 import sqlite3
 import subprocess
 import sys
+import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
+
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 DB_FILE = "library.db"
 
@@ -157,9 +161,14 @@ class LibraryApp(tk.Tk):
         self.title("Book Library Manager")
         self.geometry("900x600")
 
+        self.library_path = "/home/nikolay/Books/"
+        os.makedirs(self.library_path, exist_ok=True)
+
         self.create_widgets()
         self.check_db_files_exist()
         self.refresh_books()
+
+        self.start_watcher()
 
     def create_widgets(self):
         # Панель поиска
@@ -174,7 +183,7 @@ class LibraryApp(tk.Tk):
         ttk.Button(top_frame, text="🔎", width=3, command=self.refresh_books).pack(side=tk.LEFT, padx=2)
         ttk.Button(top_frame, text="❌", width=3, command=self.reset_search).pack(side=tk.LEFT, padx=2)
         # ttk.Button(top_frame, text="Импорт .bnf", command=self.import_bnf).pack(side=tk.LEFT, padx=2)
-        ttk.Button(top_frame, text="Сканировать папку", command=self.scan_folder).pack(side=tk.LEFT, padx=2)
+        ttk.Button(top_frame, text="Сканировать папку", command=self.scan_folder_dialog).pack(side=tk.LEFT, padx=2)
         # ttk.Button(top_frame, text="Экспорт CSV", command=self.export_csv).pack(side=tk.LEFT, padx=2)
 
         # Основная область
@@ -215,6 +224,19 @@ class LibraryApp(tk.Tk):
         # Статус-бар
         self.status_var = tk.StringVar(value="Готово")
         ttk.Label(self, textvariable=self.status_var, anchor="w").pack(fill=tk.X, side=tk.BOTTOM)
+
+    def on_files_changed(self):
+        """Коллбек, вызываемый при изменениях в папке"""
+        print("Изменения в папке, обновляем библиотеку...")
+        self.scan_folder(self.library_path)
+
+    def start_watcher(self):
+        """Запуск watchdog в отдельном потоке"""
+        event_handler = LibraryWatcher(self)
+        self.observer = Observer()
+        self.observer.schedule(event_handler, self.library_path, recursive=True)
+        self.observer_thread = threading.Thread(target=self.observer.start, daemon=True)
+        self.observer_thread.start()
 
     def sort_column(self, col):
         # получаем все элементы
@@ -583,8 +605,13 @@ class LibraryApp(tk.Tk):
             except Exception as e:
                 messagebox.showerror("Ошибка", str(e))
 
-    def scan_folder(self):
+    def scan_folder_dialog(self):
         folder = filedialog.askdirectory()
+        self.library_path = folder
+        self.start_watcher()
+        self.scan_folder(folder)
+
+    def scan_folder(self, folder):
         if folder:
             count = 0
             for root, _, files in os.walk(folder):
@@ -618,6 +645,25 @@ class LibraryApp(tk.Tk):
                     tags = ", ".join(get_tags_for_book(book[0]))
                     writer.writerow(list(book) + [tags])
             messagebox.showinfo("Экспорт", f"Экспортировано в {filepath}")
+
+
+class LibraryWatcher(FileSystemEventHandler):
+    """Класс, который реагирует на изменения файлов"""
+
+    def __init__(self, app):
+        self.app = app
+
+    def on_modified(self, event):
+        if not event.is_directory:
+            self.app.on_files_changed()
+
+    def on_created(self, event):
+        if not event.is_directory:
+            self.app.on_files_changed()
+
+    def on_deleted(self, event):
+        if not event.is_directory:
+            self.app.on_files_changed()
 
 
 if __name__ == "__main__":
