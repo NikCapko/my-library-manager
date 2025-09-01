@@ -82,7 +82,9 @@ BASE_HTML = """
             <td>{{ book['description'] }}</td>
             <td>
                 {% for tag in book['tags'] %}
-                    <a href="/?{% for t in request.args.getlist('tag') %}tag={{t}}&{% endfor %}tag={{ tag }}" style="color:blue">{{ tag }},</a>
+                    <a 
+                    style="display:inline-block; background:#e0e0e0; padding:5px 10px; margin:3px; border-radius:15px; font-size:14px;"
+                     href="/?{% for t in request.args.getlist('tag') %}tag={{t}}&{% endfor %}tag={{ tag }}" style="color:blue">{{ tag }}</a>
                 {% endfor %}
             </td>
         </tr>
@@ -131,7 +133,8 @@ BOOK_HTML = """
     <p><b>Автор:</b> <a href="/?author={{ book['author'] }}" style="color:blue">{{ book['author'] }}</a></p>
     <p><b>Теги:</b>
       {% for tag in book['tags'] %}
-        <a href="/?{% for t in tags %}tag={{t}}&{% endfor %}tag={{ tag }}" style="color:blue">{{ tag }}</a>{% if not loop.last %}, {% endif %}
+        <a style="display:inline-block; background:#e0e0e0; padding:5px 10px; margin:3px; border-radius:15px; font-size:14px;"
+        href="/?{% for t in tags %}tag={{t}}&{% endfor %}tag={{ tag }}" style="color:blue">{{ tag }}</a>
       {% endfor %}
     </p>
     <p><b>Описание:</b></p>
