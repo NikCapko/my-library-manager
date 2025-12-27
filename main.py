@@ -6,7 +6,7 @@ import subprocess
 import sys
 import threading
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 
 from watchdog.observers import Observer
 
@@ -29,7 +29,9 @@ def connect():
 
     conn.create_collation("UNI_NOCASE", _cmp)
     # На всякий случай функция для ручного приведения
-    conn.create_function("UNI_LOWER", 1, lambda s: "" if s is None else str(s).casefold())
+    conn.create_function(
+        "UNI_LOWER", 1, lambda s: "" if s is None else str(s).casefold()
+    )
     return conn
 
 
@@ -88,7 +90,10 @@ def save_tags(book_id, tags):
         cur.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag,))
         cur.execute("SELECT id FROM tags WHERE name=?", (tag,))
         tag_id = cur.fetchone()[0]
-        cur.execute("INSERT OR IGNORE INTO book_tags (book_id, tag_id) VALUES (?, ?)", (book_id, tag_id))
+        cur.execute(
+            "INSERT OR IGNORE INTO book_tags (book_id, tag_id) VALUES (?, ?)",
+            (book_id, tag_id),
+        )
     conn.commit()
     conn.close()
 
@@ -96,11 +101,14 @@ def save_tags(book_id, tags):
 def get_tags_for_book(book_id):
     conn = connect()
     cur = conn.cursor()
-    cur.execute("""
+    cur.execute(
+        """
         SELECT name FROM tags
         JOIN book_tags ON tags.id = book_tags.tag_id
         WHERE book_tags.book_id=?
-    """, (book_id,))
+    """,
+        (book_id,),
+    )
     tags = [row[0] for row in cur.fetchall()]
     conn.close()
     return tags
@@ -111,15 +119,21 @@ def add_or_update_book(title, author, description, lang=None, bnf_path=None, tag
     conn = connect()
     cur = conn.cursor()
     if book_id:
-        cur.execute("""
+        cur.execute(
+            """
             UPDATE books SET title=?, author=?, description=?, lang=?, bnf_path=?
             WHERE id=?
-        """, (title, author, description, lang, bnf_path, book_id))
+        """,
+            (title, author, description, lang, bnf_path, book_id),
+        )
     else:
-        cur.execute("""
+        cur.execute(
+            """
             INSERT INTO books (title, author, description, lang, bnf_path)
             VALUES (?, ?, ?, ?, ?)
-        """, (title, author, description, lang, bnf_path))
+        """,
+            (title, author, description, lang, bnf_path),
+        )
         book_id = cur.lastrowid
     conn.commit()
     conn.close()
@@ -132,7 +146,8 @@ def get_books(filter_text=""):
     cur = conn.cursor()
     if filter_text:
         f = filter_text.casefold()
-        cur.execute("""
+        cur.execute(
+            """
             SELECT DISTINCT books.*
             FROM books
             LEFT JOIN book_tags ON books.id = book_tags.book_id
@@ -141,7 +156,9 @@ def get_books(filter_text=""):
                OR UNI_LOWER(books.author) LIKE UNI_LOWER(?)
                OR UNI_LOWER(tags.name)    LIKE UNI_LOWER(?)
             ORDER BY UNI_LOWER(books.title)
-        """, (f"%{f}%", f"%{f}%", f"%{f}%"))
+        """,
+            (f"%{f}%", f"%{f}%", f"%{f}%"),
+        )
     else:
         cur.execute("SELECT * FROM books ORDER BY UNI_LOWER(title)")
     rows = cur.fetchall()
@@ -184,11 +201,16 @@ class LibraryApp(tk.Tk):
         search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         search_entry.bind("<Return>", lambda e: self.refresh_books())
 
-        ttk.Button(top_frame, text="🔎", width=3, command=self.refresh_books).pack(side=tk.LEFT, padx=2)
-        ttk.Button(top_frame, text="❌", width=3, command=self.reset_search).pack(side=tk.LEFT, padx=2)
+        ttk.Button(top_frame, text="🔎", width=3, command=self.refresh_books).pack(
+            side=tk.LEFT, padx=2
+        )
+        ttk.Button(top_frame, text="❌", width=3, command=self.reset_search).pack(
+            side=tk.LEFT, padx=2
+        )
         # ttk.Button(top_frame, text="Импорт .bnf", command=self.import_bnf).pack(side=tk.LEFT, padx=2)
-        ttk.Button(top_frame, text="Сканировать папку", command=self.scan_folder_dialog).pack(side=tk.LEFT, padx=2)
-        # ttk.Button(top_frame, text="Экспорт CSV", command=self.export_csv).pack(side=tk.LEFT, padx=2)
+        ttk.Button(
+            top_frame, text="Сканировать папку", command=self.scan_folder_dialog
+        ).pack(side=tk.LEFT, padx=2)
 
         # Основная область
         main_frame = ttk.Frame(self)
@@ -196,19 +218,29 @@ class LibraryApp(tk.Tk):
 
         # Список книг
         column_widths = {
-            "id": 1,
+            "id": 50,
             "author": 200,
-            "title": 400,
-            "description": 800,
+            "title": 350,
+            "description": 650,
+            "tags": 300,
         }
 
-        self.tree = ttk.Treeview(main_frame, columns=("id", "author", "title", "description"), show="headings")
+        self.tree = ttk.Treeview(
+            main_frame,
+            columns=("id", "author", "title", "description", "tags"),
+            show="headings",
+        )
         self.sort_orders = {"author": True, "title": True}
 
         self.tree.heading("id", text="ID")
-        self.tree.heading("author", text="Автор", command=lambda: self.sort_column("author"))
-        self.tree.heading("title", text="Название", command=lambda: self.sort_column("title"))
+        self.tree.heading(
+            "author", text="Автор", command=lambda: self.sort_column("author")
+        )
+        self.tree.heading(
+            "title", text="Название", command=lambda: self.sort_column("title")
+        )
         self.tree.heading("description", text="Описание")
+        self.tree.heading("tags", text="Теги")
         for col in self.tree["columns"]:
             width = column_widths.get(col, 10)
             self.tree.column(col, width=width)
@@ -217,7 +249,9 @@ class LibraryApp(tk.Tk):
         self.tree.bind("<Double-1>", self.open_metadata_dialog)
 
         # Скроллбар
-        scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=self.tree.yview)
+        scrollbar = ttk.Scrollbar(
+            main_frame, orient="vertical", command=self.tree.yview
+        )
         self.tree.configure(yscroll=scrollbar.set)
         scrollbar.pack(side=tk.LEFT, fill=tk.Y)
 
@@ -227,7 +261,9 @@ class LibraryApp(tk.Tk):
 
         # Статус-бар
         self.status_var = tk.StringVar(value="Готово")
-        ttk.Label(self, textvariable=self.status_var, anchor="w").pack(fill=tk.X, side=tk.BOTTOM)
+        ttk.Label(self, textvariable=self.status_var, anchor="w").pack(
+            fill=tk.X, side=tk.BOTTOM
+        )
 
     def start_watcher(self):
         """Запуск watchdog в отдельном потоке"""
@@ -256,11 +292,14 @@ class LibraryApp(tk.Tk):
         self.tree.delete(*self.tree.get_children())
         conn = connect()
         cur = conn.cursor()
-        cur.execute("""
+        cur.execute(
+            """
             SELECT * FROM books
             WHERE UNI_LOWER(author) = UNI_LOWER(?)
             ORDER BY UNI_LOWER(title)
-        """, (author,))
+        """,
+            (author,),
+        )
         books = cur.fetchall()
         conn.close()
 
@@ -275,13 +314,16 @@ class LibraryApp(tk.Tk):
         self.tree.delete(*self.tree.get_children())
         conn = connect()
         cur = conn.cursor()
-        cur.execute("""
+        cur.execute(
+            """
             SELECT books.* FROM books
             JOIN book_tags ON books.id = book_tags.book_id
             JOIN tags ON tags.id = book_tags.tag_id
             WHERE UNI_LOWER(tags.name) = UNI_LOWER(?)
             ORDER BY UNI_LOWER(books.title)
-        """, (tag,))
+        """,
+            (tag,),
+        )
         books = cur.fetchall()
         conn.close()
 
@@ -294,11 +336,14 @@ class LibraryApp(tk.Tk):
     def find_book_id(title, author):
         conn = connect()
         cur = conn.cursor()
-        cur.execute("""
+        cur.execute(
+            """
             SELECT id FROM books
             WHERE UNI_LOWER(title)  = UNI_LOWER(?)
               AND UNI_LOWER(author) = UNI_LOWER(?)
-        """, (title, author))
+        """,
+            (title, author),
+        )
         row = cur.fetchone()
         conn.close()
         return row[0] if row else None
@@ -339,7 +384,8 @@ class LibraryApp(tk.Tk):
         books = get_books(self.search_var.get())
         for book in books:
             book_id, title, author, desc, lang, bnf_path, favorite = book
-            self.tree.insert("", tk.END, values=(book_id, author, title, desc))
+            tags = ", ".join(get_tags_for_book(book_id))
+            self.tree.insert("", tk.END, values=(book_id, author, title, desc, tags))
         self.status_var.set(f"Найдено книг: {len(books)}")
 
     def show_details(self, event):
@@ -352,15 +398,21 @@ class LibraryApp(tk.Tk):
             _, title, author, desc, lang, bnf_path, favorite = book
             tags = get_tags_for_book(book_id)
             folder = os.path.dirname(bnf_path) if bnf_path else None
-            base_name = os.path.splitext(os.path.basename(bnf_path))[0] if bnf_path else None
+            base_name = (
+                os.path.splitext(os.path.basename(bnf_path))[0] if bnf_path else None
+            )
 
             self.details_text.config(state="normal")
             self.details_text.delete(1.0, tk.END)
 
             # Стили
-            self.details_text.tag_configure("label", font=("TkDefaultFont", 10, "bold"), spacing3=5)
+            self.details_text.tag_configure(
+                "label", font=("TkDefaultFont", 10, "bold"), spacing3=5
+            )
             self.details_text.tag_configure("value", spacing3=5)
-            self.details_text.tag_configure("taglink", foreground="blue", underline=True)
+            self.details_text.tag_configure(
+                "taglink", foreground="blue", underline=True
+            )
 
             # Название
             self.details_text.insert(tk.END, "Название: ", "label")
@@ -371,9 +423,13 @@ class LibraryApp(tk.Tk):
             start_index = self.details_text.index(tk.INSERT)
             self.details_text.insert(tk.END, f"{author}\n", "taglink")
             tag_name = f"authorlink_{book_id}"
-            self.details_text.tag_add(tag_name, start_index, f"{start_index}+{len(author)}c")
+            self.details_text.tag_add(
+                tag_name, start_index, f"{start_index}+{len(author)}c"
+            )
             self.details_text.tag_config(tag_name, foreground="blue", underline=True)
-            self.details_text.tag_bind(tag_name, "<Button-1>", lambda e, a=author: self.search_by_author(a))
+            self.details_text.tag_bind(
+                tag_name, "<Button-1>", lambda e, a=author: self.search_by_author(a)
+            )
 
             # Описание
             self.details_text.insert(tk.END, "\nОписание:\n", "label")
@@ -386,8 +442,12 @@ class LibraryApp(tk.Tk):
                 self.details_text.insert(tk.END, tag, "taglink")
                 tag_name = f"taglink_{book_id}_{i}"
                 self.details_text.tag_add(tag_name, f"end-{len(tag)}c", "end")
-                self.details_text.tag_config(tag_name, foreground="blue", underline=True)
-                self.details_text.tag_bind(tag_name, "<Button-1>", lambda e, t=tag: self.search_by_tag(t))
+                self.details_text.tag_config(
+                    tag_name, foreground="blue", underline=True
+                )
+                self.details_text.tag_bind(
+                    tag_name, "<Button-1>", lambda e, t=tag: self.search_by_tag(t)
+                )
                 if i != len(tags) - 1:
                     self.details_text.insert(tk.END, ", ", "value")
             self.details_text.insert(tk.END, "\n", "value")
@@ -397,18 +457,29 @@ class LibraryApp(tk.Tk):
             if lang in ("ru", "en"):
                 langlink_name = f"langlink_{lang}"
                 self.details_text.insert(tk.END, lang, langlink_name)
-                self.details_text.tag_config(langlink_name, foreground="blue", underline=True)
-                self.details_text.tag_bind(langlink_name, "<Button-1>",
-                                           lambda e, l=lang: self.open_file(folder, base_name))
+                self.details_text.tag_config(
+                    langlink_name, foreground="blue", underline=True
+                )
+                self.details_text.tag_bind(
+                    langlink_name,
+                    "<Button-1>",
+                    lambda e, l=lang: self.open_file(folder, base_name),
+                )
             elif lang == "en-ru":
                 langs = [("ru", False), ("en", False), ("en-ru", True)]
                 for i, (l, use_paraline) in enumerate(langs):
                     langlink_name = f"langlink_{i}"
                     self.details_text.insert(tk.END, l, langlink_name)
-                    self.details_text.tag_config(langlink_name, foreground="blue", underline=True)
-                    self.details_text.tag_bind(langlink_name, "<Button-1>",
-                                               lambda e, ll=l, pp=use_paraline: self.open_lang_file(folder, base_name,
-                                                                                                    ll, paraline=pp))
+                    self.details_text.tag_config(
+                        langlink_name, foreground="blue", underline=True
+                    )
+                    self.details_text.tag_bind(
+                        langlink_name,
+                        "<Button-1>",
+                        lambda e, ll=l, pp=use_paraline: self.open_lang_file(
+                            folder, base_name, ll, paraline=pp
+                        ),
+                    )
                     if i != len(langs) - 1:
                         self.details_text.insert(tk.END, ", ", "value")
             self.details_text.insert(tk.END, "\n\n", "value")
@@ -418,8 +489,12 @@ class LibraryApp(tk.Tk):
                 self.details_text.insert(tk.END, "Открыть папку\n", "taglink")
                 folder_name = f"openfolder_{book_id}"
                 self.details_text.tag_add(folder_name, "end-12c", "end")
-                self.details_text.tag_config(folder_name, foreground="blue", underline=True)
-                self.details_text.tag_bind(folder_name, "<Button-1>", lambda e, f=bnf_path: self.open_folder(f))
+                self.details_text.tag_config(
+                    folder_name, foreground="blue", underline=True
+                )
+                self.details_text.tag_bind(
+                    folder_name, "<Button-1>", lambda e, f=bnf_path: self.open_folder(f)
+                )
 
             self.details_text.config(state="disabled")
 
@@ -433,7 +508,14 @@ class LibraryApp(tk.Tk):
             else:  # Linux
                 # пытаемся разные менеджеры
                 for fm in ["nautilus", "dolphin", "thunar", "pcmanfm"]:
-                    if subprocess.call(["which", fm], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0:
+                    if (
+                        subprocess.call(
+                            ["which", fm],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                        )
+                        == 0
+                    ):
                         if fm in ("nautilus", "dolphin"):
                             subprocess.Popen([fm, "--select", file_path])
                         else:
@@ -494,20 +576,24 @@ class LibraryApp(tk.Tk):
             new_tags = [t.strip() for t in tags_var.get().split(",") if t.strip()]
 
             # обновляем в БД
-            add_or_update_book(new_title, new_author, new_desc, new_lang, bnf_path, new_tags)
+            add_or_update_book(
+                new_title, new_author, new_desc, new_lang, bnf_path, new_tags
+            )
 
             # обновляем bnf-файл
             if bnf_path and os.path.exists(bnf_path):
                 try:
                     with open(bnf_path, "r", encoding="utf-8") as f:
                         data = json.load(f)
-                    data.update({
-                        "title": new_title,
-                        "author": new_author,
-                        "description": new_desc,
-                        "lang": new_lang,
-                        "tags": new_tags
-                    })
+                    data.update(
+                        {
+                            "title": new_title,
+                            "author": new_author,
+                            "description": new_desc,
+                            "lang": new_lang,
+                            "tags": new_tags,
+                        }
+                    )
                     with open(bnf_path, "w", encoding="utf-8") as f:
                         json.dump(data, f, ensure_ascii=False, indent=2)
                 except Exception as e:
@@ -541,7 +627,10 @@ class LibraryApp(tk.Tk):
 
         try:
             if paraline:
-                subprocess.Popen(["/home/nikolay/bin/paraline", file_path])
+                subprocess.Popen(
+                    ["/home/nikolay/bin/paraline", file_path],
+                    cwd="/home/nikolay/Projects/parallel_editor",
+                )
             else:
                 subprocess.Popen(["ghostwriter", file_path])
         except Exception as e:
@@ -597,7 +686,7 @@ class LibraryApp(tk.Tk):
                     data.get("description", ""),
                     lang=data.get("lang"),
                     bnf_path=filepath,
-                    tags=data.get("tags", [])
+                    tags=data.get("tags", []),
                 )
                 self.refresh_books()
                 messagebox.showinfo("Импорт", f"Импортировано: {data.get('title')}")
@@ -617,7 +706,9 @@ class LibraryApp(tk.Tk):
                 for file in files:
                     if file.endswith(".bnf"):
                         try:
-                            with open(os.path.join(root, file), "r", encoding="utf-8") as f:
+                            with open(
+                                os.path.join(root, file), "r", encoding="utf-8"
+                            ) as f:
                                 data = json.load(f)
                             add_or_update_book(
                                 data.get("title", ""),
@@ -625,7 +716,7 @@ class LibraryApp(tk.Tk):
                                 data.get("description", ""),
                                 lang=data.get("lang"),
                                 bnf_path=os.path.join(root, file),
-                                tags=data.get("tags", [])
+                                tags=data.get("tags", []),
                             )
                             count += 1
                         except:
@@ -633,17 +724,6 @@ class LibraryApp(tk.Tk):
             self.check_db_files_exist()
             self.refresh_books()
             messagebox.showinfo("Сканирование", f"Добавлено или обновлено {count} книг")
-
-    def export_csv(self):
-        filepath = filedialog.asksaveasfilename(defaultextension=".csv")
-        if filepath:
-            with open(filepath, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(["ID", "Название", "Автор", "Описание", "Теги"])
-                for book in get_books():
-                    tags = ", ".join(get_tags_for_book(book[0]))
-                    writer.writerow(list(book) + [tags])
-            messagebox.showinfo("Экспорт", f"Экспортировано в {filepath}")
 
 
 if __name__ == "__main__":

@@ -1,9 +1,10 @@
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
-import os
-import sys
+#!/usr/bin/python
 import json
+import os
 import re
+import sys
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
 
 
 class BnfEditor:
@@ -34,24 +35,42 @@ class BnfEditor:
         self.tags_var = tk.StringVar()
 
         row = 0
-        ttk.Label(main_frame, text="Название:", font=("Arial", 10, "bold")).grid(row=row, column=0, sticky="w", pady=5)
-        ttk.Entry(main_frame, textvariable=self.title_var, width=50).grid(row=row, column=1, sticky="ew", padx=5, pady=5)
+        ttk.Label(main_frame, text="Название:", font=("Arial", 10, "bold")).grid(
+            row=row, column=0, sticky="w", pady=5
+        )
+        ttk.Entry(main_frame, textvariable=self.title_var, width=50).grid(
+            row=row, column=1, sticky="ew", padx=5, pady=5
+        )
         row += 1
 
-        ttk.Label(main_frame, text="Автор:", font=("Arial", 10, "bold")).grid(row=row, column=0, sticky="w", pady=5)
-        ttk.Entry(main_frame, textvariable=self.author_var, width=50).grid(row=row, column=1, sticky="ew", padx=5, pady=5)
+        ttk.Label(main_frame, text="Автор:", font=("Arial", 10, "bold")).grid(
+            row=row, column=0, sticky="w", pady=5
+        )
+        ttk.Entry(main_frame, textvariable=self.author_var, width=50).grid(
+            row=row, column=1, sticky="ew", padx=5, pady=5
+        )
         row += 1
 
-        ttk.Label(main_frame, text="Язык:", font=("Arial", 10, "bold")).grid(row=row, column=0, sticky="w", pady=5)
-        ttk.Entry(main_frame, textvariable=self.lang_var, width=50).grid(row=row, column=1, sticky="ew", padx=5, pady=5)
+        ttk.Label(main_frame, text="Язык:", font=("Arial", 10, "bold")).grid(
+            row=row, column=0, sticky="w", pady=5
+        )
+        ttk.Entry(main_frame, textvariable=self.lang_var, width=50).grid(
+            row=row, column=1, sticky="ew", padx=5, pady=5
+        )
         row += 1
 
-        ttk.Label(main_frame, text="Теги (через запятую):", font=("Arial", 10, "bold")).grid(row=row, column=0, sticky="w", pady=5)
-        ttk.Entry(main_frame, textvariable=self.tags_var, width=50).grid(row=row, column=1, sticky="ew", padx=5, pady=5)
+        ttk.Label(
+            main_frame, text="Теги (через запятую):", font=("Arial", 10, "bold")
+        ).grid(row=row, column=0, sticky="w", pady=5)
+        ttk.Entry(main_frame, textvariable=self.tags_var, width=50).grid(
+            row=row, column=1, sticky="ew", padx=5, pady=5
+        )
         row += 1
 
         # Описание
-        ttk.Label(main_frame, text="Описание:", font=("Arial", 10, "bold")).grid(row=row, column=0, sticky="nw", pady=5)
+        ttk.Label(main_frame, text="Описание:", font=("Arial", 10, "bold")).grid(
+            row=row, column=0, sticky="nw", pady=5
+        )
         desc_frame = ttk.Frame(main_frame)
         desc_frame.grid(row=row, column=1, sticky="nsew", padx=5, pady=5)
 
@@ -70,8 +89,12 @@ class BnfEditor:
         buttons_frame = ttk.Frame(self.root)
         buttons_frame.pack(side=tk.BOTTOM, pady=10)
 
-        ttk.Button(buttons_frame, text="Сохранить", command=self.save_metadata).pack(side=tk.LEFT, padx=5)
-        ttk.Button(buttons_frame, text="Выход", command=self.root.quit).pack(side=tk.LEFT, padx=5)
+        ttk.Button(buttons_frame, text="Сохранить", command=self.save_metadata).pack(
+            side=tk.LEFT, padx=5
+        )
+        ttk.Button(buttons_frame, text="Выход", command=self.root.quit).pack(
+            side=tk.LEFT, padx=5
+        )
 
     def load_from_filename(self, filepath):
         """Парсинг названия и автора из имени файла .md"""
@@ -80,7 +103,7 @@ class BnfEditor:
         self.metadata_path = os.path.join(base_dir, f"{base_name}.bnf")
 
         # Проверяем формат "Название [Автор]"
-        match = re.match(r'^(.*?)(?:\[(.*?)\])?$', base_name)
+        match = re.match(r"^(.*?)(?:\[(.*?)\])?$", base_name)
         if match:
             title = match.group(1).strip()
             author = match.group(2).strip() if match.group(2) else ""
@@ -95,7 +118,7 @@ class BnfEditor:
         """Загрузка данных из .bnf"""
         self.metadata_path = filepath
         try:
-            with open(filepath, 'r', encoding='utf-8') as f:
+            with open(filepath, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 self.title_var.set(data.get("title", ""))
                 self.author_var.set(data.get("author", ""))
@@ -110,21 +133,23 @@ class BnfEditor:
             "title": self.title_var.get(),
             "author": self.author_var.get(),
             "lang": self.lang_var.get(),
-            "tags": [tag.strip() for tag in self.tags_var.get().split(",") if tag.strip()],
-            "description": self.desc_text.get("1.0", tk.END).strip()
+            "tags": [
+                tag.strip() for tag in self.tags_var.get().split(",") if tag.strip()
+            ],
+            "description": self.desc_text.get("1.0", tk.END).strip(),
         }
 
         save_path = self.metadata_path
         if not save_path:
             save_path = filedialog.asksaveasfilename(
                 defaultextension=".bnf",
-                filetypes=[("BNF файлы", "*.bnf"), ("Все файлы", "*.*")]
+                filetypes=[("BNF файлы", "*.bnf"), ("Все файлы", "*.*")],
             )
             if not save_path:
                 return
 
         try:
-            with open(save_path, 'w', encoding='utf-8') as f:
+            with open(save_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=4)
             messagebox.showinfo("Успех", f"Метаданные сохранены в {save_path}")
             self.metadata_path = save_path
