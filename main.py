@@ -1,4 +1,5 @@
-import csv
+#!/usr/bin/python
+
 import json
 import os
 import sqlite3
@@ -246,7 +247,7 @@ class LibraryApp(tk.Tk):
             self.tree.column(col, width=width)
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.tree.bind("<<TreeviewSelect>>", self.show_details)
-        self.tree.bind("<Double-1>", self.open_metadata_dialog)
+        self.tree.bind("<Double-1>", self.open_file_from_list)
 
         # Скроллбар
         scrollbar = ttk.Scrollbar(
@@ -439,8 +440,8 @@ class LibraryApp(tk.Tk):
             self.details_text.insert(tk.END, "\n\nТеги: ", "label")
             for i, tag in enumerate(tags):
                 start_index = self.details_text.index(tk.INSERT)
-                self.details_text.insert(tk.END, tag, "taglink")
                 tag_name = f"taglink_{book_id}_{i}"
+                self.details_text.insert(tk.END, tag, tag_name)
                 self.details_text.tag_add(tag_name, f"end-{len(tag)}c", "end")
                 self.details_text.tag_config(
                     tag_name, foreground="blue", underline=True
@@ -468,7 +469,7 @@ class LibraryApp(tk.Tk):
             elif lang == "en-ru":
                 langs = [("ru", False), ("en", False), ("en-ru", True)]
                 for i, (l, use_paraline) in enumerate(langs):
-                    langlink_name = f"langlink_{i}"
+                    langlink_name = f"lang_link_{i}"
                     self.details_text.insert(tk.END, l, langlink_name)
                     self.details_text.tag_config(
                         langlink_name, foreground="blue", underline=True
@@ -477,7 +478,7 @@ class LibraryApp(tk.Tk):
                         langlink_name,
                         "<Button-1>",
                         lambda e, ll=l, pp=use_paraline: self.open_lang_file(
-                            folder, base_name, ll, paraline=pp
+                            folder, base_name, ll, pp
                         ),
                     )
                     if i != len(langs) - 1:
@@ -486,8 +487,8 @@ class LibraryApp(tk.Tk):
 
             # --- Новое: кнопка "Открыть папку" ---
             if bnf_path and os.path.exists(bnf_path):
-                self.details_text.insert(tk.END, "Открыть папку\n", "taglink")
-                folder_name = f"openfolder_{book_id}"
+                folder_name = f"open_folder_{book_id}"
+                self.details_text.insert(tk.END, "Открыть папку\n", folder_name)
                 self.details_text.tag_add(folder_name, "end-12c", "end")
                 self.details_text.tag_config(
                     folder_name, foreground="blue", underline=True
@@ -495,6 +496,16 @@ class LibraryApp(tk.Tk):
                 self.details_text.tag_bind(
                     folder_name, "<Button-1>", lambda e, f=bnf_path: self.open_folder(f)
                 )
+            # Редактировать bnf файл
+            open_bnf = f"open_bnf_{book_id}"
+            self.details_text.insert(tk.END, "\nОткрыть bnf-файл\n", open_bnf)
+            self.details_text.tag_add(open_bnf, "end-12c", "end")
+            self.details_text.tag_config(open_bnf, foreground="blue", underline=True)
+            self.details_text.tag_bind(
+                open_bnf,
+                "<Button-1>",
+                lambda e, f=book_id: self.open_metadata_dialog(f),
+            )
 
             self.details_text.config(state="disabled")
 
@@ -526,11 +537,30 @@ class LibraryApp(tk.Tk):
         except Exception as e:
             messagebox.showerror("Ошибка", f"Не удалось открыть папку: {e}")
 
-    def open_metadata_dialog(self, event):
+    def open_file_from_list(self, event):
         sel = self.tree.selection()
         if not sel:
             return
         book_id = self.tree.item(sel[0])["values"][0]
+        book = get_book(book_id)
+        if not book:
+            return
+
+        _, title, author, desc, lang, bnf_path, favorite = book
+        folder = os.path.dirname(bnf_path) if bnf_path else None
+        base_name = (
+            os.path.splitext(os.path.basename(bnf_path))[0] if bnf_path else None
+        )
+        if lang in ("ru", "en"):
+            self.open_file(folder, base_name)
+        elif lang == "en-ru":
+            self.open_lang_file(folder, base_name, "en-ru", True)
+
+    def open_metadata_dialog(self, book_id):
+        sel = self.tree.selection()
+        if not sel:
+            return
+        # book_id = self.tree.item(sel[0])["values"][0]
         book = get_book(book_id)
         if not book:
             return
@@ -555,11 +585,6 @@ class LibraryApp(tk.Tk):
         author_var = tk.StringVar(value=author)
         tk.Entry(dialog, textvariable=author_var).pack(fill="x")
 
-        tk.Label(dialog, text="Описание").pack(anchor="w")
-        desc_text = tk.Text(dialog, height=5)
-        desc_text.insert("1.0", desc)
-        desc_text.pack(fill="both", expand=True)
-
         tk.Label(dialog, text="Язык").pack(anchor="w")
         lang_var = tk.StringVar(value=lang or "")
         tk.Entry(dialog, textvariable=lang_var).pack(fill="x")
@@ -567,6 +592,11 @@ class LibraryApp(tk.Tk):
         tk.Label(dialog, text="Теги (через запятую)").pack(anchor="w")
         tags_var = tk.StringVar(value=", ".join(tags))
         tk.Entry(dialog, textvariable=tags_var).pack(fill="x")
+
+        tk.Label(dialog, text="Описание").pack(anchor="w")
+        desc_text = tk.Text(dialog, height=5)
+        desc_text.insert("1.0", desc)
+        desc_text.pack(fill="both", expand=True)
 
         def save_changes():
             new_title = title_var.get()
