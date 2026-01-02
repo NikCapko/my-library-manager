@@ -222,13 +222,14 @@ class LibraryApp(tk.Tk):
             "id": 50,
             "author": 200,
             "title": 350,
+            "lang": 50,
             "description": 650,
             "tags": 300,
         }
 
         self.tree = ttk.Treeview(
             main_frame,
-            columns=("id", "author", "title", "description", "tags"),
+            columns=("id", "author", "title", "lang", "description", "tags"),
             show="headings",
         )
         self.sort_orders = {"author": True, "title": True}
@@ -240,6 +241,7 @@ class LibraryApp(tk.Tk):
         self.tree.heading(
             "title", text="Название", command=lambda: self.sort_column("title")
         )
+        self.tree.heading("lang", text="Язык")
         self.tree.heading("description", text="Описание")
         self.tree.heading("tags", text="Теги")
         for col in self.tree["columns"]:
@@ -306,7 +308,7 @@ class LibraryApp(tk.Tk):
 
         for book in books:
             book_id, title, author, desc, lang, bnf_path = book
-            self.tree.insert("", tk.END, values=(book_id, author, title, desc))
+            self.tree.insert("", tk.END, values=(book_id, author, title, lang, desc))
 
         self.status_var.set(f"Найдено книг автора '{author}': {len(books)}")
 
@@ -330,7 +332,10 @@ class LibraryApp(tk.Tk):
 
         for book in books:
             book_id, title, author, desc, lang, bnf_path = book
-            self.tree.insert("", tk.END, values=(book_id, author, title, desc))
+            tags = ", ".join(get_tags_for_book(book_id))
+            self.tree.insert(
+                "", tk.END, values=(book_id, author, title, lang, desc, tags)
+            )
 
         self.status_var.set(f"Найдено книг с тегом '{tag}': {len(books)}")
 
@@ -386,7 +391,9 @@ class LibraryApp(tk.Tk):
         for book in books:
             book_id, title, author, desc, lang, bnf_path, favorite = book
             tags = ", ".join(get_tags_for_book(book_id))
-            self.tree.insert("", tk.END, values=(book_id, author, title, desc, tags))
+            self.tree.insert(
+                "", tk.END, values=(book_id, author, title, lang, desc, tags)
+            )
         self.status_var.set(f"Найдено книг: {len(books)}")
 
     def show_details(self, event):
@@ -577,23 +584,28 @@ class LibraryApp(tk.Tk):
         main_frame.pack(expand=True, fill=tk.BOTH)
 
         # поля
-        tk.Label(dialog, text="Название").pack(anchor="w")
+        ttk.Label(dialog, text="Название").pack(anchor="w")
         title_var = tk.StringVar(value=title)
-        tk.Entry(dialog, textvariable=title_var).pack(fill="x")
+        ttk.Entry(dialog, textvariable=title_var).pack(fill="x")
 
-        tk.Label(dialog, text="Автор").pack(anchor="w")
+        ttk.Label(dialog, text="Автор").pack(anchor="w")
         author_var = tk.StringVar(value=author)
-        tk.Entry(dialog, textvariable=author_var).pack(fill="x")
+        ttk.Entry(dialog, textvariable=author_var).pack(fill="x")
 
-        tk.Label(dialog, text="Язык").pack(anchor="w")
-        lang_var = tk.StringVar(value=lang or "")
-        tk.Entry(dialog, textvariable=lang_var).pack(fill="x")
+        ttk.Label(dialog, text="Язык").pack(anchor="w")
+        lang_var = tk.StringVar(value=lang or "ru")
+        ttk.Combobox(
+            dialog,
+            textvariable=lang_var,
+            values=("ru", "en-ru"),
+            state="readonly",
+        ).pack(fill="x")
 
-        tk.Label(dialog, text="Теги (через запятую)").pack(anchor="w")
+        ttk.Label(dialog, text="Теги (через запятую)").pack(anchor="w")
         tags_var = tk.StringVar(value=", ".join(tags))
-        tk.Entry(dialog, textvariable=tags_var).pack(fill="x")
+        ttk.Entry(dialog, textvariable=tags_var).pack(fill="x")
 
-        tk.Label(dialog, text="Описание").pack(anchor="w")
+        ttk.Label(dialog, text="Описание").pack(anchor="w")
         desc_text = tk.Text(dialog, height=5)
         desc_text.insert("1.0", desc)
         desc_text.pack(fill="both", expand=True)

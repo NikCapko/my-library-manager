@@ -31,7 +31,7 @@ class BnfEditor:
         # Переменные для полей
         self.title_var = tk.StringVar()
         self.author_var = tk.StringVar()
-        self.lang_var = tk.StringVar()
+        self.lang_var = tk.StringVar(value="ru")
         self.tags_var = tk.StringVar()
 
         row = 0
@@ -54,9 +54,13 @@ class BnfEditor:
         ttk.Label(main_frame, text="Язык:", font=("Arial", 10, "bold")).grid(
             row=row, column=0, sticky="w", pady=5
         )
-        ttk.Entry(main_frame, textvariable=self.lang_var, width=50).grid(
-            row=row, column=1, sticky="ew", padx=5, pady=5
-        )
+        ttk.Combobox(
+            main_frame,
+            textvariable=self.lang_var,
+            values=("ru", "en-ru"),
+            state="readonly",
+            width=50,
+        ).grid(row=row, column=1, sticky="ew", padx=5, pady=5)
         row += 1
 
         ttk.Label(
