@@ -307,8 +307,11 @@ class LibraryApp(tk.Tk):
         conn.close()
 
         for book in books:
-            book_id, title, author, desc, lang, bnf_path = book
-            self.tree.insert("", tk.END, values=(book_id, author, title, lang, desc))
+            book_id, title, author, desc, lang, bnf_path, favorite = book
+            tags = ", ".join(get_tags_for_book(book_id))
+            self.tree.insert(
+                "", tk.END, values=(book_id, author, title, lang, desc, tags)
+            )
 
         self.status_var.set(f"Найдено книг автора '{author}': {len(books)}")
 
@@ -331,7 +334,7 @@ class LibraryApp(tk.Tk):
         conn.close()
 
         for book in books:
-            book_id, title, author, desc, lang, bnf_path = book
+            book_id, title, author, desc, lang, bnf_path, favorite = book
             tags = ", ".join(get_tags_for_book(book_id))
             self.tree.insert(
                 "", tk.END, values=(book_id, author, title, lang, desc, tags)
