@@ -468,9 +468,7 @@ class LibraryApp(tk.Tk):
             if lang in ("ru", "en"):
                 langlink_name = f"langlink_{lang}"
                 self.details_text.insert(tk.END, lang, langlink_name)
-                self.details_text.tag_add(
-                    langlink_name, f"end-{len(langlink_name)}c", "end"
-                )
+                self.details_text.tag_add(langlink_name, f"end-{len(lang)}c", "end")
                 self.details_text.tag_config(
                     langlink_name, foreground="blue", underline=True
                 )
@@ -501,10 +499,9 @@ class LibraryApp(tk.Tk):
             # --- Новое: кнопка "Открыть папку" ---
             if bnf_path and os.path.exists(bnf_path):
                 folder_name = f"open_folder_{book_id}"
-                self.details_text.insert(tk.END, "Открыть папку\n", folder_name)
-                self.details_text.tag_add(
-                    folder_name, f"end-{len(folder_name)}c", "end"
-                )
+                text = "Открыть папку"
+                self.details_text.insert(tk.END, text, folder_name)
+                self.details_text.tag_add(folder_name, f"end-{len(text)}c", "end")
                 self.details_text.tag_config(
                     folder_name, foreground="blue", underline=True
                 )
@@ -513,8 +510,9 @@ class LibraryApp(tk.Tk):
                 )
             # Редактировать bnf файл
             open_bnf = f"open_bnf_{book_id}"
-            self.details_text.insert(tk.END, "\nОткрыть bnf-файл\n", open_bnf)
-            self.details_text.tag_add(open_bnf, f"end-{len(open_bnf)}c", "end")
+            text = "Открыть bnf-файл"
+            self.details_text.insert(tk.END, f"\n\n{text}", open_bnf)
+            self.details_text.tag_add(open_bnf, f"end-{len(text)}c", "end")
             self.details_text.tag_config(open_bnf, foreground="blue", underline=True)
             self.details_text.tag_bind(
                 open_bnf,
