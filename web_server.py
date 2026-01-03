@@ -4,7 +4,15 @@ import sqlite3
 import threading
 
 import markdown
-from flask import Flask, render_template_string, request, abort, redirect, url_for, make_response
+from flask import (
+    Flask,
+    abort,
+    make_response,
+    redirect,
+    render_template_string,
+    request,
+    url_for,
+)
 from markdown import Extension
 from markdown.blockprocessors import HashHeaderProcessor
 from markdown.extensions.toc import TocExtension
@@ -52,7 +60,7 @@ BASE_HTML = """
       {% for t in tags %}
         <span style="display:inline-block; background:#e0e0e0; padding:5px 10px; margin:3px; border-radius:15px; font-size:14px;">
           {{ t }}
-          <a href="/?{% for tt in tags if tt != t %}tag={{tt}}&{% endfor %}" 
+          <a href="/?{% for tt in tags if tt != t %}tag={{tt}}&{% endfor %}"
              style="margin-left:5px; color:red; text-decoration:none;">✕</a>
         </span>
       {% endfor %}
@@ -64,6 +72,7 @@ BASE_HTML = """
             <th>★</th>
             <th><a href="/?sort=author{% if query %}&q={{ query }}{% endif %}{% if tag %}&tag={{ tag }}{% endif %}{% if author %}&author={{ author }}{% endif %}">Автор</a></th>
             <th><a href="/?sort=title{% if query %}&q={{ query }}{% endif %}{% if tag %}&tag={{ tag }}{% endif %}{% if author %}&author={{ author }}{% endif %}">Название</a></th>
+            <th>Язык</th>
             <th>Описание</th>
             <th>Теги</th>
         </tr>
@@ -79,10 +88,11 @@ BASE_HTML = """
             </td>
             <td><a href="/?author={{ book['author'] }}" style="color:blue">{{ book['author'] }}</a></td>
             <td><a href="/book/{{ book['id'] }}">{{ book['title'] }}</a></td>
+            <td>{{ book['lang'] }}</td>
             <td>{{ book['description'] }}</td>
             <td>
                 {% for tag in book['tags'] %}
-                    <a 
+                    <a
                     style="display:inline-block; background:#e0e0e0; padding:5px 10px; margin:3px; border-radius:15px; font-size:14px;"
                      href="/?{% for t in request.args.getlist('tag') %}tag={{t}}&{% endfor %}tag={{ tag }}" style="color:blue">{{ tag }}</a>
                 {% endfor %}
@@ -113,14 +123,14 @@ BOOK_HTML = """
         .markdown-body th, .markdown-body td { border: 1px solid #ccc; padding: 5px; }
 
         pre { white-space: pre-wrap; word-wrap: break-word; border: 1px solid #ccc; padding: 10px; background: #fafafa; font-size: 16px; }
-        .lang-btn { 
-            margin-right: 10px; 
-            padding: 6px 10px; 
-            border: 1px solid #ccc; 
-            background: #f8f8f8; 
-            display: inline-block; 
-            text-decoration: none; 
-            color: black; 
+        .lang-btn {
+            margin-right: 10px;
+            padding: 6px 10px;
+            border: 1px solid #ccc;
+            background: #f8f8f8;
+            display: inline-block;
+            text-decoration: none;
+            color: black;
             font-size: 16px;
         }
         table { border-collapse: collapse; width: 100%; font-size: 16px; }
@@ -228,7 +238,9 @@ def connect():
 
     conn.create_collation("UNI_NOCASE", _cmp)
     # На всякий случай функция для ручного приведения
-    conn.create_function("UNI_LOWER", 1, lambda s: "" if s is None else str(s).casefold())
+    conn.create_function(
+        "UNI_LOWER", 1, lambda s: "" if s is None else str(s).casefold()
+    )
     return conn
 
 
@@ -266,9 +278,11 @@ def get_books(query=None, tags=None, author=None, sort="title", favorite=False):
             params.append(author)
         if query:
             joins.append(
-                "LEFT JOIN book_tags ON books.id = book_tags.book_id LEFT JOIN tags ON tags.id = book_tags.tag_id")
+                "LEFT JOIN book_tags ON books.id = book_tags.book_id LEFT JOIN tags ON tags.id = book_tags.tag_id"
+            )
             where.append(
-                "(UNI_LOWER(books.title) LIKE UNI_LOWER(?) OR UNI_LOWER(books.author) LIKE UNI_LOWER(?) OR UNI_LOWER(tags.name) LIKE UNI_LOWER(?))")
+                "(UNI_LOWER(books.title) LIKE UNI_LOWER(?) OR UNI_LOWER(books.author) LIKE UNI_LOWER(?) OR UNI_LOWER(tags.name) LIKE UNI_LOWER(?))"
+            )
             params += [f"%{query}%", f"%{query}%", f"%{query}%"]
         if favorite:
             where.append("books.favorite=1")
@@ -286,15 +300,17 @@ def get_books(query=None, tags=None, author=None, sort="title", favorite=False):
 
     books = []
     for row in rows:
-        books.append({
-            "id": row["id"],
-            "title": row["title"],
-            "description": row["description"],
-            "author": row["author"],
-            "lang": row["lang"],
-            "tags": get_tags_for_book(row["id"]),
-            "favorite": row["favorite"]
-        })
+        books.append(
+            {
+                "id": row["id"],
+                "title": row["title"],
+                "description": row["description"],
+                "author": row["author"],
+                "lang": row["lang"],
+                "tags": get_tags_for_book(row["id"]),
+                "favorite": row["favorite"],
+            }
+        )
     return books
 
 
@@ -315,18 +331,21 @@ def get_book(id):
         "lang": row["lang"],
         "bnf_path": row["bnf_path"],
         "favorite": row["favorite"],
-        "tags": get_tags_for_book(row["id"])
+        "tags": get_tags_for_book(row["id"]),
     }
 
 
 def get_tags_for_book(book_id):
     conn = connect()
     cur = conn.cursor()
-    cur.execute("""
+    cur.execute(
+        """
         SELECT name FROM tags
         JOIN book_tags ON tags.id = book_tags.tag_id
         WHERE book_tags.book_id=?
-    """, (book_id,))
+    """,
+        (book_id,),
+    )
     tags = [r[0] for r in cur.fetchall()]
     conn.close()
     return tags
@@ -347,18 +366,20 @@ def index():
         tags=tags if tags else None,
         author=author if author else None,
         sort=sort,
-        favorite=(favorite == "1")
+        favorite=(favorite == "1"),
     )
 
-    return make_response(render_template_string(
-        BASE_HTML,
-        books=books,
-        query=q,
-        tags=tags,
-        author=author,
-        sort=sort,
-        favorite=(favorite == "1")
-    ))
+    return make_response(
+        render_template_string(
+            BASE_HTML,
+            books=books,
+            query=q,
+            tags=tags,
+            author=author,
+            sort=sort,
+            favorite=(favorite == "1"),
+        )
+    )
 
 
 @app.route("/book/<int:book_id>")
@@ -379,7 +400,9 @@ def view_book(book_id):
         if os.path.exists(file_path):
             with open(file_path, "r", encoding="utf-8") as f:
                 md_text = f.read()
-            md = markdown.Markdown(extensions=[StrictHeadersExtension(), TocExtension(), 'nl2br'])
+            md = markdown.Markdown(
+                extensions=[StrictHeadersExtension(), TocExtension(), "nl2br"]
+            )
             html_content = md.convert(md_text)
             toc_html = md.toc
             content = f"""
@@ -397,7 +420,13 @@ def view_book(book_id):
                     if file_path.endswith(".md"):
                         with open(file_path, "r", encoding="utf-8") as f:
                             md_text = f.read()
-                        md = markdown.Markdown(extensions=[StrictHeadersExtension(), TocExtension(), 'nl2br'])
+                        md = markdown.Markdown(
+                            extensions=[
+                                StrictHeadersExtension(),
+                                TocExtension(),
+                                "nl2br",
+                            ]
+                        )
                         html_content = md.convert(md_text)
                         toc_html = md.toc
                         content = f"""
@@ -416,7 +445,13 @@ def view_book(book_id):
                     if file_path.endswith(".md"):
                         with open(file_path, "r", encoding="utf-8") as f:
                             md_text = f.read()
-                        md = markdown.Markdown(extensions=[StrictHeadersExtension(), TocExtension(), 'nl2br'])
+                        md = markdown.Markdown(
+                            extensions=[
+                                StrictHeadersExtension(),
+                                TocExtension(),
+                                "nl2br",
+                            ]
+                        )
                         html_content = md.convert(md_text)
                         toc_html = md.toc
                         content = f"""
@@ -452,7 +487,9 @@ def view_book(book_id):
             else:
                 content = "[Файлы EN и RU не найдены]"
 
-    return render_template_string(BOOK_HTML, book=book, content=content, parallel=parallel)
+    return render_template_string(
+        BOOK_HTML, book=book, content=content, parallel=parallel
+    )
 
 
 @app.route("/edit/<int:book_id>", methods=["GET", "POST"])
@@ -471,10 +508,13 @@ def edit_book(book_id):
         # --- обновляем в БД ---
         conn = connect()
         cur = conn.cursor()
-        cur.execute("""
+        cur.execute(
+            """
             UPDATE books SET title=?, author=?, description=?, lang=?
             WHERE id=?
-        """, (title, author, description, lang, book_id))
+        """,
+            (title, author, description, lang, book_id),
+        )
         cur.execute("DELETE FROM book_tags WHERE book_id=?", (book_id,))
         conn.commit()
         conn.close()
@@ -485,8 +525,11 @@ def edit_book(book_id):
             cur.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag,))
             cur.execute("SELECT id FROM tags WHERE name=?", (tag,))
             tag_id = cur.fetchone()[0]
-            cur.execute("INSERT INTO book_tags (book_id, tag_id) VALUES (?, ?)", (book_id, tag_id))
-        
+            cur.execute(
+                "INSERT INTO book_tags (book_id, tag_id) VALUES (?, ?)",
+                (book_id, tag_id),
+            )
+
         conn.commit()
         conn.close()
 
@@ -494,6 +537,7 @@ def edit_book(book_id):
         bnf_path = book["bnf_path"]
         try:
             import json
+
             if os.path.exists(bnf_path):
                 with open(bnf_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
@@ -536,12 +580,15 @@ def toggle_fav(book_id):
         tag = request.args.get("tag", "")
         author = request.args.get("author", "")
         favorite = request.args.get("favorite", "")
-        return redirect(url_for("index", q=q, tag=tag, author=author, favorite=favorite))
+        return redirect(
+            url_for("index", q=q, tag=tag, author=author, favorite=favorite)
+        )
 
 
 class StrictHeaderProcessor(HashHeaderProcessor):
     """Обрабатывает только заголовки с пробелом после #"""
-    RE = re.compile(r'(?:^|\n)(?P<level>#{1,6})\s+(?P<header>.*?)\s*#*(\n|$)')
+
+    RE = re.compile(r"(?:^|\n)(?P<level>#{1,6})\s+(?P<header>.*?)\s*#*(\n|$)")
 
 
 class StrictHeadersExtension(Extension):
@@ -549,12 +596,10 @@ class StrictHeadersExtension(Extension):
 
     def extendMarkdown(self, md):
         md.parser.blockprocessors.register(
-            StrictHeaderProcessor(md.parser),
-            'strict_hashheader',
-            70
+            StrictHeaderProcessor(md.parser), "strict_hashheader", 70
         )
         # Удаляем стандартный процессор заголовков
-        md.parser.blockprocessors.deregister('hashheader')
+        md.parser.blockprocessors.deregister("hashheader")
 
 
 def start_watcher():
