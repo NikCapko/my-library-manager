@@ -205,15 +205,15 @@ EDIT_HTML = """
         <label>Описание:</label>
         <textarea name="description" rows="6">{{ book['description'] }}</textarea>
 
+        <label>Теги (через запятую):</label>
+        <input type="text" name="tags" value="{{ tags }}">
+
         <label>Язык:</label>
         <select name="lang">
             <option value="ru" {% if book['lang']=="ru" %}selected{% endif %}>ru</option>
             <option value="en" {% if book['lang']=="en" %}selected{% endif %}>en</option>
             <option value="en-ru" {% if book['lang']=="en-ru" %}selected{% endif %}>en-ru</option>
         </select>
-
-        <label>Теги (через запятую):</label>
-        <input type="text" name="tags" value="{{ tags }}">
 
         <button type="submit">Сохранить</button>
     </form>
@@ -520,18 +520,22 @@ def edit_book(book_id):
         conn.close()
 
         conn = connect()
-        cur = conn.cursor()
-        for tag in tags:
-            cur.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag,))
-            cur.execute("SELECT id FROM tags WHERE name=?", (tag,))
-            tag_id = cur.fetchone()[0]
-            cur.execute(
-                "INSERT INTO book_tags (book_id, tag_id) VALUES (?, ?)",
-                (book_id, tag_id),
-            )
+        try:
+            cur = conn.cursor()
+            for tag in tags:
+                cur.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag,))
+                cur.execute("SELECT id FROM tags WHERE name=?", (tag,))
+                tag_id = cur.fetchone()[0]
+                cur.execute(
+                    "INSERT INTO book_tags (book_id, tag_id) VALUES (?, ?)",
+                    (book_id, tag_id),
+                )
 
-        conn.commit()
-        conn.close()
+            conn.commit()
+        except Exception as e:
+            return f"<p>Ошибка при обновлении БД: {e}</p>"
+        finally:
+            conn.close()
 
         # --- обновляем .bnf файл ---
         bnf_path = book["bnf_path"]
