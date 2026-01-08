@@ -122,6 +122,43 @@ BOOK_HTML = """
         .markdown-body table { border-collapse: collapse; width: 100%; }
         .markdown-body th, .markdown-body td { border: 1px solid #ccc; padding: 5px; }
 
+        /* Кнопка скролла в начало */
+        .scroll-top-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            background: #333;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+
+        .scroll-top-btn:hover {
+            background: #555;
+        }
+
+        .scroll-top-btn:active {
+            background: #777;
+        }
+
+        .scroll-top-btn.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .scroll-top-btn i {
+            font-size: 24px;
+        }
+
         pre { white-space: pre-wrap; word-wrap: break-word; border: 1px solid #ccc; padding: 10px; background: #fafafa; font-size: 16px; }
         .lang-btn {
             margin-right: 10px;
@@ -139,7 +176,33 @@ BOOK_HTML = """
     </style>
 </head>
 <body>
+    <div class="scroll-top-btn" id="scrollTopBtn">
+        <i>↑</i>
+    </div>
+
     <h1>{{ book['title'] }}</h1>
+
+     <script>
+        // Показываем кнопку, когда пользователь прокрутил более чем на половину страницы
+        const scrollBtn = document.getElementById('scrollTopBtn');
+        window.addEventListener('scroll', () => {
+            if (document.body.scrollTop > window.innerHeight / 2 ||
+                document.documentElement.scrollTop > window.innerHeight / 2) {
+                scrollBtn.classList.add('show');
+            } else {
+                scrollBtn.classList.remove('show');
+            }
+        });
+
+        // Возвращаем пользователя в начало страницы при клике на кнопку
+        scrollBtn.addEventListener('click', () => {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        });
+    </script>
+
     <p><b>Автор:</b> <a href="/?author={{ book['author'] }}" style="color:blue">{{ book['author'] }}</a></p>
     <p><b>Теги:</b>
       {% for tag in book['tags'] %}
