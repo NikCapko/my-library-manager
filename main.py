@@ -389,14 +389,29 @@ class LibraryApp(tk.Tk):
             print(f"Удалено {deleted} записей без файлов.")
 
     def refresh_books(self):
+        selected = self.tree.selection()
+        selected_book_id = None
+
+        if selected:
+            values = self.tree.item(selected[0], "values")
+            selected_book_id = values[0]  # book_id
+
         self.tree.delete(*self.tree.get_children())
         books = get_books(self.search_var.get())
+        restored_item = None
+
         for book in books:
             book_id, title, author, desc, lang, bnf_path, favorite = book
             tags = ", ".join(get_tags_for_book(book_id))
-            self.tree.insert(
+            item = self.tree.insert(
                 "", tk.END, values=(book_id, author, title, lang, desc, tags)
             )
+            if selected_book_id == str(book_id):
+                restored_item = item
+        if restored_item:
+            self.tree.selection_set(restored_item)
+            self.tree.focus(restored_item)
+            self.tree.see(restored_item)
         self.status_var.set(f"Найдено книг: {len(books)}")
 
     def show_details(self, event):
