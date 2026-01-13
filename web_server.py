@@ -13,12 +13,11 @@ from flask import (
     request,
     url_for,
 )
+from library_watcher import LibraryWatcher
 from markdown import Extension
 from markdown.blockprocessors import HashHeaderProcessor
 from markdown.extensions.toc import TocExtension
 from watchdog.observers import Observer
-
-from library_watcher import LibraryWatcher
 
 DB_FILE = "library.db"
 
@@ -47,7 +46,7 @@ BASE_HTML = """
 <body>
     <h1>Библиотека</h1>
     <form method="get">
-        <input type="text" name="q" placeholder="Поиск..." value="{{ query }}">
+        <input type="search" name="q" placeholder="Поиск..." value="{{ query }}">
         <button type="submit">Искать</button>
         {% if query or tag or author or favorite %}
         <a href="/" style="margin-left:10px;">Сброс</a>
