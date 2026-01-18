@@ -19,7 +19,9 @@ def connect():
 
     conn.create_collation("UNI_NOCASE", _cmp)
     # На всякий случай функция для ручного приведения
-    conn.create_function("UNI_LOWER", 1, lambda s: "" if s is None else str(s).casefold())
+    conn.create_function(
+        "UNI_LOWER", 1, lambda s: "" if s is None else str(s).casefold()
+    )
     return conn
 
 
@@ -35,7 +37,7 @@ def handle_file_event(file):
                 data.get("description", ""),
                 lang=data.get("lang"),
                 bnf_path=file,
-                tags=data.get("tags", [])
+                tags=data.get("tags", []),
             )
         except Exception as e:
             print("error on loading file")
@@ -48,16 +50,22 @@ def add_or_update_book(title, author, description, lang=None, bnf_path=None, tag
     cur = conn.cursor()
     if book_id:
         print("updating book id")
-        cur.execute("""
+        cur.execute(
+            """
             UPDATE books SET title=?, author=?, description=?, lang=?, bnf_path=?
             WHERE id=?
-        """, (title, author, description, lang, bnf_path, book_id))
+        """,
+            (title, author, description, lang, bnf_path, book_id),
+        )
     else:
         print("creating new book")
-        cur.execute("""
+        cur.execute(
+            """
             INSERT OR IGNORE INTO books (title, author, description, lang, bnf_path)
             VALUES (?, ?, ?, ?, ?)
-        """, (title, author, description, lang, bnf_path))
+        """,
+            (title, author, description, lang, bnf_path),
+        )
         book_id = cur.lastrowid
     conn.commit()
     conn.close()
@@ -82,12 +90,15 @@ def save_tags(book_id, tags):
     new_tags = {t.strip() for t in tags}
 
     # получаем текущие теги книги
-    cur.execute("""
+    cur.execute(
+        """
         SELECT t.name
         FROM tags t
         JOIN book_tags bt ON t.id = bt.tag_id
         WHERE bt.book_id = ?
-    """, (book_id,))
+    """,
+        (book_id,),
+    )
     current_tags = {row[0] for row in cur.fetchall()}
 
     # теги для удаления и добавления
@@ -96,21 +107,26 @@ def save_tags(book_id, tags):
 
     # удаляем ненужные связи
     if to_delete:
-        cur.execute("""
+        cur.execute(
+            """
             DELETE FROM book_tags
             WHERE book_id = ?
               AND tag_id IN (
                 SELECT id FROM tags WHERE name IN ({})
               )
         """.format(",".join("?" * len(to_delete))),
-        (book_id, *to_delete))
+            (book_id, *to_delete),
+        )
 
     # добавляем новые
     for tag in to_add:
         cur.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag,))
         cur.execute("SELECT id FROM tags WHERE name=?", (tag,))
         tag_id = cur.fetchone()[0]
-        cur.execute("INSERT OR IGNORE INTO book_tags (book_id, tag_id) VALUES (?, ?)", (book_id, tag_id))
+        cur.execute(
+            "INSERT OR IGNORE INTO book_tags (book_id, tag_id) VALUES (?, ?)",
+            (book_id, tag_id),
+        )
 
     conn.commit()
     conn.close()
@@ -128,7 +144,6 @@ def remove_book_from_db(file):
 
 
 class LibraryWatcher(FileSystemEventHandler):
-
     def on_created(self, event):
         print(f"on_created {event.src_path}")
         if not event.is_directory:
