@@ -73,16 +73,6 @@ def init_db():
     conn.commit()
     conn.close()
 
-
-def find_book_id(title, author):
-    conn = connect()
-    cur = conn.cursor()
-    cur.execute("SELECT id FROM books WHERE title=? AND author=?", (title, author))
-    row = cur.fetchone()
-    conn.close()
-    return row[0] if row else None
-
-
 def save_tags(book_id, tags):
     conn = connect()
     cur = conn.cursor()
@@ -169,16 +159,118 @@ def get_books(filter_text=""):
     return rows
 
 
-def get_book(id):
+def get_book(book_id):
     conn = connect()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM books WHERE id=?", (id,))
+    cur.execute("SELECT * FROM books WHERE id=?", (book_id,))
     book = cur.fetchone()
     conn.close()
     return book
 
 
 # --- GUI ---
+def check_db_files_exist():
+    """Удаляем из БД записи, у которых нет .bnf файла"""
+    conn = connect()
+    cur = conn.cursor()
+    cur.execute("SELECT id, bnf_path FROM books")
+    rows = cur.fetchall()
+
+    deleted = 0
+    for book_id, path in rows:
+        if not os.path.exists(path):
+            cur.execute("DELETE FROM books WHERE id=?", (book_id,))
+            deleted += 1
+
+    if deleted:
+        conn.commit()
+        print(f"Удалено {deleted} записей без файлов.")
+
+
+def find_book_id(title, author):
+    conn = connect()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT id FROM books
+        WHERE UNI_LOWER(title)  = UNI_LOWER(?)
+          AND UNI_LOWER(author) = UNI_LOWER(?)
+    """,
+        (title, author),
+    )
+    row = cur.fetchone()
+    conn.close()
+    return row[0] if row else None
+
+
+def open_folder(file_path):
+    folder = os.path.dirname(file_path)
+    try:
+        if os.name == "nt":  # Windows
+            subprocess.Popen(["explorer", "/select,", file_path])
+        elif sys.platform == "darwin":  # macOS
+            subprocess.Popen(["open", "-R", file_path])
+        else:  # Linux
+            # пытаемся разные менеджеры
+            for fm in ["nautilus", "dolphin", "thunar", "pcmanfm"]:
+                if (
+                    subprocess.call(
+                        ["which", fm],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                    == 0
+                ):
+                    if fm in ("nautilus", "dolphin"):
+                        subprocess.Popen([fm, "--select", file_path])
+                    else:
+                        subprocess.Popen([fm, file_path])
+                    return
+            # fallback — просто открыть папку
+            subprocess.Popen(["xdg-open", folder])
+    except Exception as e:
+        messagebox.showerror("Ошибка", f"Не удалось открыть папку: {e}")
+
+
+def open_lang_file(folder, base_name, lang_code, paraline=False):
+    if lang_code in ("ru", "en"):
+        file_name = f"{base_name}.{lang_code}.md"
+    elif lang_code == "en-ru":
+        file_name = f"{base_name}.en.md"
+    else:
+        file_name = f"{base_name}.md"
+
+    file_path = os.path.join(folder, file_name)
+    if not os.path.exists(file_path):
+        messagebox.showerror("Ошибка", f"Файл {file_path} не найден")
+        return
+
+    try:
+        if paraline:
+            subprocess.Popen(
+                ["/home/nikolay/bin/paraline", file_path],
+                cwd="/home/nikolay/Projects/parallel_editor",
+            )
+        else:
+            subprocess.Popen(["ghostwriter", file_path])
+    except Exception as e:
+        messagebox.showerror("Ошибка", str(e))
+
+
+def open_file(folder, base_name):
+    file_name = f"{base_name}.md"
+    file_path = os.path.join(folder, file_name)
+
+    if not os.path.exists(file_path):
+        messagebox.showerror("Ошибка", f"Файл {file_path} не найден")
+        return
+
+    try:
+        subprocess.Popen(["ghostwriter", file_path])
+    except Exception as e:
+        messagebox.showerror("Ошибка", str(e))
+
+
 class LibraryApp(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -194,7 +286,7 @@ class LibraryApp(tk.Tk):
         os.makedirs(self.library_path, exist_ok=True)
 
         self.create_widgets()
-        self.check_db_files_exist()
+        check_db_files_exist()
         self.refresh_books()
 
         self.event_queue = queue.Queue()
@@ -241,7 +333,7 @@ class LibraryApp(tk.Tk):
             columns=("id", "author", "title", "lang", "description", "tags"),
             show="headings",
         )
-        self.sort_orders = {"author": True, "title": True}
+        sort_orders = {"author": True, "title": True}
 
         self.tree.heading("id", text="ID")
         self.tree.heading(
@@ -280,16 +372,16 @@ class LibraryApp(tk.Tk):
     def start_watcher(self):
         """Запуск watchdog в отдельном потоке"""
         event_handler = LibraryWatcher(self.event_queue)
-        self.observer = Observer()
-        self.observer.schedule(event_handler, self.library_path, recursive=True)
-        self.observer_thread = threading.Thread(target=self.observer.start, daemon=True)
-        self.observer_thread.start()
+        observer = Observer()
+        observer.schedule(event_handler, self.library_path, recursive=True)
+        observer_thread = threading.Thread(target=observer.start, daemon=True)
+        observer_thread.start()
 
     def process_fs_events(self):
         """Вызывается ТОЛЬКО в главном потоке"""
         try:
             while True:
-                event_type, path = self.event_queue.get_nowait()
+                #event_type, path = self.event_queue.get_nowait()
                 sel = self.tree.selection()
                 if not sel:
                     return
@@ -366,38 +458,6 @@ class LibraryApp(tk.Tk):
 
         self.status_var.set(f"Найдено книг с тегом '{tag}': {len(books)}")
 
-    def find_book_id(title, author):
-        conn = connect()
-        cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT id FROM books
-            WHERE UNI_LOWER(title)  = UNI_LOWER(?)
-              AND UNI_LOWER(author) = UNI_LOWER(?)
-        """,
-            (title, author),
-        )
-        row = cur.fetchone()
-        conn.close()
-        return row[0] if row else None
-
-    def check_db_files_exist(self):
-        """Удаляем из БД записи, у которых нет .bnf файла"""
-        conn = connect()
-        cur = conn.cursor()
-        cur.execute("SELECT id, bnf_path FROM books")
-        rows = cur.fetchall()
-
-        deleted = 0
-        for book_id, path in rows:
-            if not os.path.exists(path):
-                cur.execute("DELETE FROM books WHERE id=?", (book_id,))
-                deleted += 1
-
-        if deleted:
-            conn.commit()
-            print(f"Удалено {deleted} записей без файлов.")
-
     def refresh_books(self):
         selected = self.tree.selection()
         selected_book_id = None
@@ -432,8 +492,9 @@ class LibraryApp(tk.Tk):
         book_id, title, author, desc, lang, bnf_path, favorite = book
         tags = ", ".join(get_tags_for_book(book_id))
         self.tree.item(position, values=(book_id, author, title, lang, desc, tags))
+        self.show_details()
 
-    def show_details(self, event):
+    def show_details(self, *args):
         sel = self.tree.selection()
         if not sel:
             return
@@ -483,7 +544,6 @@ class LibraryApp(tk.Tk):
             # Теги
             self.details_text.insert(tk.END, "\n\nТеги: ", "label")
             for i, tag in enumerate(tags):
-                start_index = self.details_text.index(tk.INSERT)
                 tag_name = f"taglink_{book_id}_{i}"
                 self.details_text.insert(tk.END, tag, tag_name)
                 self.details_text.tag_add(tag_name, f"end-{len(tag)}c", "end")
@@ -509,7 +569,7 @@ class LibraryApp(tk.Tk):
                 self.details_text.tag_bind(
                     langlink_name,
                     "<Button-1>",
-                    lambda e, l=lang: self.open_file(folder, base_name),
+                    lambda e, l=lang: open_file(folder, base_name),
                 )
             elif lang == "en-ru":
                 langs = [("ru", False), ("en", False), ("en-ru", True)]
@@ -522,7 +582,7 @@ class LibraryApp(tk.Tk):
                     self.details_text.tag_bind(
                         langlink_name,
                         "<Button-1>",
-                        lambda e, ll=l, pp=use_paraline: self.open_lang_file(
+                        lambda e, ll=l, pp=use_paraline: open_lang_file(
                             folder, base_name, ll, pp
                         ),
                     )
@@ -540,7 +600,7 @@ class LibraryApp(tk.Tk):
                     folder_name, foreground="blue", underline=True
                 )
                 self.details_text.tag_bind(
-                    folder_name, "<Button-1>", lambda e, f=bnf_path: self.open_folder(f)
+                    folder_name, "<Button-1>", lambda e, f=bnf_path: open_folder(f)
                 )
             # Редактировать bnf файл
             open_bnf = f"open_bnf_{book_id}"
@@ -556,35 +616,7 @@ class LibraryApp(tk.Tk):
 
             self.details_text.config(state="disabled")
 
-    def open_folder(self, file_path):
-        folder = os.path.dirname(file_path)
-        try:
-            if os.name == "nt":  # Windows
-                subprocess.Popen(["explorer", "/select,", file_path])
-            elif sys.platform == "darwin":  # macOS
-                subprocess.Popen(["open", "-R", file_path])
-            else:  # Linux
-                # пытаемся разные менеджеры
-                for fm in ["nautilus", "dolphin", "thunar", "pcmanfm"]:
-                    if (
-                        subprocess.call(
-                            ["which", fm],
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL,
-                        )
-                        == 0
-                    ):
-                        if fm in ("nautilus", "dolphin"):
-                            subprocess.Popen([fm, "--select", file_path])
-                        else:
-                            subprocess.Popen([fm, file_path])
-                        return
-                # fallback — просто открыть папку
-                subprocess.Popen(["xdg-open", folder])
-        except Exception as e:
-            messagebox.showerror("Ошибка", f"Не удалось открыть папку: {e}")
-
-    def open_file_from_list(self, event):
+    def open_file_from_list(self, *args):
         sel = self.tree.selection()
         if not sel:
             return
@@ -599,9 +631,9 @@ class LibraryApp(tk.Tk):
             os.path.splitext(os.path.basename(bnf_path))[0] if bnf_path else None
         )
         if lang in ("ru", "en"):
-            self.open_file(folder, base_name)
+            open_file(folder, base_name)
         elif lang == "en-ru":
-            self.open_lang_file(folder, base_name, "en-ru", True)
+            open_lang_file(folder, base_name, "en-ru", True)
 
     def open_metadata_dialog(self, book_id):
         sel = self.tree.selection()
@@ -694,44 +726,7 @@ class LibraryApp(tk.Tk):
         cancel_button = ttk.Button(buttons_frame, text="Отмена", command=dialog.destroy)
         cancel_button.pack(side=tk.LEFT, padx=5)
 
-    def open_lang_file(self, folder, base_name, lang_code, paraline=False):
-        if lang_code in ("ru", "en"):
-            file_name = f"{base_name}.{lang_code}.md"
-        elif lang_code == "en-ru":
-            file_name = f"{base_name}.en.md"
-        else:
-            file_name = f"{base_name}.md"
-
-        file_path = os.path.join(folder, file_name)
-        if not os.path.exists(file_path):
-            messagebox.showerror("Ошибка", f"Файл {file_path} не найден")
-            return
-
-        try:
-            if paraline:
-                subprocess.Popen(
-                    ["/home/nikolay/bin/paraline", file_path],
-                    cwd="/home/nikolay/Projects/parallel_editor",
-                )
-            else:
-                subprocess.Popen(["ghostwriter", file_path])
-        except Exception as e:
-            messagebox.showerror("Ошибка", str(e))
-
-    def open_file(self, folder, base_name):
-        file_name = f"{base_name}.md"
-        file_path = os.path.join(folder, file_name)
-
-        if not os.path.exists(file_path):
-            messagebox.showerror("Ошибка", f"Файл {file_path} не найден")
-            return
-
-        try:
-            subprocess.Popen(["ghostwriter", file_path])
-        except Exception as e:
-            messagebox.showerror("Ошибка", str(e))
-
-    def open_bnf_file(self, event):
+    def open_bnf_file(self, *args):
         sel = self.tree.selection()
         if not sel:
             return
@@ -813,7 +808,7 @@ class LibraryApp(tk.Tk):
                     except Exception as e:
                         print(f"Ошибка {file}: {e}")
 
-        self.check_db_files_exist()
+        check_db_files_exist()
 
         # передаём результат в главный поток
         self.after(0, self._scan_folder_done, count)
