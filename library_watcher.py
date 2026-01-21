@@ -144,17 +144,23 @@ def remove_book_from_db(file):
 
 
 class LibraryWatcher(FileSystemEventHandler):
+    def __init__(self, queue):
+        self.queue = queue
+
     def on_created(self, event):
         print(f"on_created {event.src_path}")
         if not event.is_directory:
             handle_file_event(event.src_path)
+            self.queue.put(("created", event.src_path))
 
     def on_deleted(self, event):
         print(f"on_deleted {event.src_path}")
         if not event.is_directory:
             remove_book_from_db(event.src_path)
+            self.queue.put(("deleted", event.src_path))
 
     def on_modified(self, event):
         print(f"on_modified {event.src_path}")
         if not event.is_directory:
             handle_file_event(event.src_path)
+            self.queue.put(("modified", event.src_path))

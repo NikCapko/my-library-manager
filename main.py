@@ -2,11 +2,13 @@
 
 import json
 import os
+import queue
 import sqlite3
 import subprocess
 import sys
 import threading
 import tkinter as tk
+from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from watchdog.observers import Observer
@@ -183,14 +185,21 @@ class LibraryApp(tk.Tk):
         self.title("Book Library Manager")
         self.geometry("900x600")
 
-        self.library_path = "/home/nikolay/Books/"
+        if getattr(sys, "frozen", False):
+            base_dir = Path(sys.executable).parent
+        else:
+            base_dir = Path(__file__).resolve().parent
+
+        self.library_path = str(base_dir / "library")
         os.makedirs(self.library_path, exist_ok=True)
 
         self.create_widgets()
         self.check_db_files_exist()
         self.refresh_books()
 
+        self.event_queue = queue.Queue()
         self.start_watcher()
+        self.process_fs_events()
 
     def create_widgets(self):
         # Панель поиска
@@ -270,11 +279,26 @@ class LibraryApp(tk.Tk):
 
     def start_watcher(self):
         """Запуск watchdog в отдельном потоке"""
-        event_handler = LibraryWatcher()
+        event_handler = LibraryWatcher(self.event_queue)
         self.observer = Observer()
         self.observer.schedule(event_handler, self.library_path, recursive=True)
         self.observer_thread = threading.Thread(target=self.observer.start, daemon=True)
         self.observer_thread.start()
+
+    def process_fs_events(self):
+        """Вызывается ТОЛЬКО в главном потоке"""
+        try:
+            while True:
+                event_type, path = self.event_queue.get_nowait()
+                sel = self.tree.selection()
+                if not sel:
+                    return
+                book_id = self.tree.item(sel[0])["values"][0]
+                self.refresh_book(book_id)
+        except queue.Empty:
+            pass
+
+        self.after(200, self.process_fs_events)  # polling
 
     def sort_column(self, col):
         # получаем все элементы
@@ -356,20 +380,6 @@ class LibraryApp(tk.Tk):
         row = cur.fetchone()
         conn.close()
         return row[0] if row else None
-
-    def sort_column(self, col):
-        data = [(self.tree.set(k, col), k) for k in self.tree.get_children("")]
-
-        def key_fn(item):
-            val = item[0]
-            if val is None:
-                return ""
-            return str(val).casefold()
-
-        data.sort(key=key_fn, reverse=not self.sort_orders[col])
-        for index, (_, k) in enumerate(data):
-            self.tree.move(k, "", index)
-        self.sort_orders[col] = not self.sort_orders[col]
 
     def check_db_files_exist(self):
         """Удаляем из БД записи, у которых нет .bnf файла"""
@@ -769,33 +779,48 @@ class LibraryApp(tk.Tk):
         folder = filedialog.askdirectory()
         self.library_path = folder
         self.start_watcher()
-        self.scan_folder(folder)
+        self.status_var.set("Сканирование...")
+        self.scan_folder_async(folder)
 
-    def scan_folder(self, folder):
-        if folder:
-            count = 0
-            for root, _, files in os.walk(folder):
-                for file in files:
-                    if file.endswith(".bnf"):
-                        try:
-                            with open(
-                                os.path.join(root, file), "r", encoding="utf-8"
-                            ) as f:
-                                data = json.load(f)
-                            add_or_update_book(
-                                data.get("title", ""),
-                                data.get("author", ""),
-                                data.get("description", ""),
-                                lang=data.get("lang"),
-                                bnf_path=os.path.join(root, file),
-                                tags=data.get("tags", []),
-                            )
-                            count += 1
-                        except:
-                            pass
-            self.check_db_files_exist()
-            self.refresh_books()
-            messagebox.showinfo("Сканирование", f"Добавлено или обновлено {count} книг")
+    def scan_folder_async(self, folder):
+        if not folder:
+            return
+
+        thread = threading.Thread(
+            target=self._scan_folder_worker, args=(folder,), daemon=True
+        )
+        thread.start()
+
+    def _scan_folder_worker(self, folder):
+        count = 0
+
+        for root, _, files in os.walk(folder):
+            for file in files:
+                if file.endswith(".bnf"):
+                    try:
+                        with open(os.path.join(root, file), "r", encoding="utf-8") as f:
+                            data = json.load(f)
+
+                        add_or_update_book(
+                            data.get("title", ""),
+                            data.get("author", ""),
+                            data.get("description", ""),
+                            lang=data.get("lang"),
+                            bnf_path=os.path.join(root, file),
+                            tags=data.get("tags", []),
+                        )
+                        count += 1
+                    except Exception as e:
+                        print(f"Ошибка {file}: {e}")
+
+        self.check_db_files_exist()
+
+        # передаём результат в главный поток
+        self.after(0, self._scan_folder_done, count)
+
+    def _scan_folder_done(self, count):
+        self.refresh_books()
+        messagebox.showinfo("Сканирование", f"Добавлено или обновлено {count} книг")
 
 
 if __name__ == "__main__":
