@@ -13,11 +13,12 @@ from flask import (
     request,
     url_for,
 )
-from library_watcher import LibraryWatcher
 from markdown import Extension
 from markdown.blockprocessors import HashHeaderProcessor
 from markdown.extensions.toc import TocExtension
 from watchdog.observers import Observer
+
+from library_watcher import LibraryWatcher
 
 DB_FILE = "library.db"
 

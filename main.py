@@ -414,6 +414,15 @@ class LibraryApp(tk.Tk):
             self.tree.see(restored_item)
         self.status_var.set(f"Найдено книг: {len(books)}")
 
+    def refresh_book(self, book_id):
+        selected = self.tree.selection()
+        children = self.tree.get_children()
+        position = children[self.tree.index(selected[0])]
+        book = get_book(book_id)
+        book_id, title, author, desc, lang, bnf_path, favorite = book
+        tags = ", ".join(get_tags_for_book(book_id))
+        self.tree.item(position, values=(book_id, author, title, lang, desc, tags))
+
     def show_details(self, event):
         sel = self.tree.selection()
         if not sel:
@@ -662,7 +671,7 @@ class LibraryApp(tk.Tk):
                 except Exception as e:
                     messagebox.showerror("Ошибка", f"Не удалось обновить .bnf: {e}")
 
-            self.refresh_books()
+            self.refresh_book(book_id)
             dialog.destroy()
 
         # Кнопки
