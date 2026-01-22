@@ -1,7 +1,10 @@
 import os
+import queue
 import re
 import sqlite3
+import sys
 import threading
+from pathlib import Path
 
 import markdown
 from flask import (
@@ -21,8 +24,6 @@ from watchdog.observers import Observer
 from library_watcher import LibraryWatcher
 
 DB_FILE = "library.db"
-
-WATCH_DIR = "/home/nikolay/Books/"  # каталог с книгами
 
 app = Flask(__name__)
 
@@ -670,12 +671,12 @@ class StrictHeadersExtension(Extension):
 
 
 def start_watcher():
-    event_handler = LibraryWatcher()
+    event_handler = LibraryWatcher(event_queue)
     observer = Observer()
-    observer.schedule(event_handler, WATCH_DIR, recursive=True)
+    observer.schedule(event_handler, library_path, recursive=True)
     observer.daemon = True
     observer.start()
-    print(f"Запущено наблюдение за {WATCH_DIR}")
+    print(f"Запущено наблюдение за {library_path}")
 
     # чтобы не блокировать Flask — в отдельном потоке
     t = threading.Thread(target=lambda: observer.join())
@@ -684,5 +685,14 @@ def start_watcher():
 
 
 if __name__ == "__main__":
+    if getattr(sys, "frozen", False):
+        base_dir = Path(sys.executable).parent
+    else:
+        base_dir = Path(__file__).resolve().parent
+
+    library_path = str(base_dir / "library")
+    os.makedirs(library_path, exist_ok=True)
+
+    event_queue = queue.Queue()
     start_watcher()
     app.run(host="0.0.0.0", port=5050, debug=True)
