@@ -17,6 +17,8 @@ class BnfEditor:
         self.filepath = filepath
         self.metadata_path = None
 
+        root.bind("<Control-s>", lambda event: self.save_metadata())
+
         self.build_ui()
         if filepath:
             if filepath.endswith(".bnf"):
