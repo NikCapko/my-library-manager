@@ -345,9 +345,9 @@ def get_books(query=None, tags=None, author=None, sort="title", favorite=False):
                 "LEFT JOIN book_tags ON books.id = book_tags.book_id LEFT JOIN tags ON tags.id = book_tags.tag_id"
             )
             where.append(
-                "(UNI_LOWER(books.title) LIKE UNI_LOWER(?) OR UNI_LOWER(books.author) LIKE UNI_LOWER(?) OR UNI_LOWER(tags.name) LIKE UNI_LOWER(?))"
+                "(UNI_LOWER(books.title) LIKE UNI_LOWER(?) OR UNI_LOWER(books.author) LIKE UNI_LOWER(?) OR UNI_LOWER(tags.name) LIKE UNI_LOWER(?)) OR UNI_LOWER(books.description) LIKE UNI_LOWER(?)"
             )
-            params += [f"%{query}%", f"%{query}%", f"%{query}%"]
+            params += [f"%{query}%", f"%{query}%", f"%{query}%", f"%{query}%"]
         if favorite:
             where.append("books.favorite=1")
 
@@ -419,7 +419,6 @@ def get_tags_for_book(book_id):
 @app.route("/")
 def index():
     q = request.args.get("q", "").strip()
-    tag = request.args.get("tag", "").strip()
     author = request.args.get("author", "").strip()
     sort = request.args.get("sort", "title")
     favorite = request.args.get("favorite", "")
@@ -644,13 +643,16 @@ def toggle_fav(book_id):
     if back == "book":
         return redirect(url_for("view_book", book_id=book_id))
     else:
-        q = request.args.get("q", "")
-        tag = request.args.get("tag", "")
-        author = request.args.get("author", "")
-        favorite = request.args.get("favorite", "")
-        return redirect(
-            url_for("index", q=q, tag=tag, author=author, favorite=favorite)
-        )
+        params = {
+            "q": request.args.get("q"),
+            "tag": request.args.get("tag"),
+            "author": request.args.get("author"),
+            "favorite": request.args.get("favorite"),
+        }
+        # оставляем только непустые параметры
+        params = {k: v for k, v in params.items() if v}
+
+        return redirect(url_for("index", **params))
 
 
 class StrictHeaderProcessor(HashHeaderProcessor):
