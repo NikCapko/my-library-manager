@@ -73,6 +73,7 @@ def init_db():
     conn.commit()
     conn.close()
 
+
 def save_tags(book_id, tags):
     conn = connect()
     cur = conn.cursor()
@@ -266,7 +267,7 @@ def open_file(folder, base_name):
         return
 
     try:
-        subprocess.Popen(["ghostwriter", file_path])
+        subprocess.Popen(["md_editor", file_path])
     except Exception as e:
         messagebox.showerror("Ошибка", str(e))
 
@@ -381,7 +382,7 @@ class LibraryApp(tk.Tk):
         """Вызывается ТОЛЬКО в главном потоке"""
         try:
             while True:
-                #event_type, path = self.event_queue.get_nowait()
+                # event_type, path = self.event_queue.get_nowait()
                 sel = self.tree.selection()
                 if not sel:
                     return
