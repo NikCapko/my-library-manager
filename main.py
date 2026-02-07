@@ -267,7 +267,10 @@ def open_file(folder, base_name):
         return
 
     try:
-        subprocess.Popen(["md_editor", file_path])
+        subprocess.Popen(
+            ["/home/nikolay/bin/md_editor", file_path],
+            cwd="/home/nikolay/Projects/parallel_editor",
+        )
     except Exception as e:
         messagebox.showerror("Ошибка", str(e))
 
@@ -352,6 +355,7 @@ class LibraryApp(tk.Tk):
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.tree.bind("<<TreeviewSelect>>", self.show_details)
         self.tree.bind("<Double-1>", self.open_file_from_list)
+        self.tree.bind("<Return>", self.open_file_from_list)
 
         # Скроллбар
         scrollbar = ttk.Scrollbar(
