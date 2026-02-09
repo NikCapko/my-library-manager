@@ -4,7 +4,9 @@ import os
 import re
 import sys
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, ttk
+
+from dialog_manager import DialogManager
 
 
 class BnfEditor:
@@ -32,15 +34,25 @@ class BnfEditor:
 
         # Переменные для полей
         self.title_var = tk.StringVar()
+        self.orig_name_var = tk.StringVar()
         self.author_var = tk.StringVar()
         self.lang_var = tk.StringVar(value="ru")
         self.tags_var = tk.StringVar()
 
         row = 0
+
         ttk.Label(main_frame, text="Название:", font=("Arial", 10, "bold")).grid(
             row=row, column=0, sticky="w", pady=5
         )
         ttk.Entry(main_frame, textvariable=self.title_var, width=50).grid(
+            row=row, column=1, sticky="ew", padx=5, pady=5
+        )
+        row += 1
+
+        ttk.Label(
+            main_frame, text="Оригинальное название:", font=("Arial", 10, "bold")
+        ).grid(row=row, column=0, sticky="w", pady=5)
+        ttk.Entry(main_frame, textvariable=self.orig_name_var, width=50).grid(
             row=row, column=1, sticky="ew", padx=5, pady=5
         )
         row += 1
@@ -127,6 +139,7 @@ class BnfEditor:
             with open(filepath, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 self.title_var.set(data.get("title", ""))
+                self.orig_name_var.set(data.get("orig_name", ""))
                 self.author_var.set(data.get("author", ""))
                 self.lang_var.set(data.get("lang", ""))
                 self.tags_var.set(", ".join(data.get("tags", [])))
@@ -138,6 +151,7 @@ class BnfEditor:
         data = {
             "title": self.title_var.get(),
             "author": self.author_var.get(),
+            "orig_name": self.orig_name_var.get(),
             "lang": self.lang_var.get(),
             "tags": [
                 tag.strip() for tag in self.tags_var.get().split(",") if tag.strip()
@@ -157,10 +171,10 @@ class BnfEditor:
         try:
             with open(save_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=4)
-            messagebox.showinfo("Успех", f"Метаданные сохранены в {save_path}")
+            DialogManager.show_dialog("Успех", f"Метаданные сохранены в {save_path}")
             self.metadata_path = save_path
         except Exception as e:
-            messagebox.showerror("Ошибка", f"Не удалось сохранить: {e}")
+            DialogManager.show_dialog("Ошибка", f"Не удалось сохранить: {e}")
 
 
 if __name__ == "__main__":

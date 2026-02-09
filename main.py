@@ -45,6 +45,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS books (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT,
+            orig_name TEXT,
             author TEXT,
             description TEXT,
             lang TEXT,
@@ -108,25 +109,27 @@ def get_tags_for_book(book_id):
     return tags
 
 
-def add_or_update_book(title, author, description, lang=None, bnf_path=None, tags=None):
+def add_or_update_book(
+    title, orig_name, author, description, lang=None, bnf_path=None, tags=None
+):
     book_id = find_book_id(title, author)
     conn = connect()
     cur = conn.cursor()
     if book_id:
         cur.execute(
             """
-            UPDATE books SET title=?, author=?, description=?, lang=?, bnf_path=?
+            UPDATE books SET title=?, orig_name=?, author=?, description=?, lang=?, bnf_path=?
             WHERE id=?
         """,
-            (title, author, description, lang, bnf_path, book_id),
+            (title, orig_name, author, description, lang, bnf_path, book_id),
         )
     else:
         cur.execute(
             """
-            INSERT INTO books (title, author, description, lang, bnf_path)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO books (title, orig_name, author, description, lang, bnf_path)
+            VALUES (?, ?, ?, ?, ?, ?)
         """,
-            (title, author, description, lang, bnf_path),
+            (title, orig_name, author, description, lang, bnf_path),
         )
         book_id = cur.lastrowid
     conn.commit()
@@ -147,11 +150,12 @@ def get_books(filter_text=""):
             LEFT JOIN book_tags ON books.id = book_tags.book_id
             LEFT JOIN tags ON tags.id = book_tags.tag_id
             WHERE UNI_LOWER(books.title)  LIKE UNI_LOWER(?)
+               OR UNI_LOWER(books.orig_name) LIKE UNI_LOWER(?)
                OR UNI_LOWER(books.author) LIKE UNI_LOWER(?)
                OR UNI_LOWER(tags.name)    LIKE UNI_LOWER(?)
             ORDER BY UNI_LOWER(books.title)
         """,
-            (f"%{f}%", f"%{f}%", f"%{f}%"),
+            (f"%{f}%", f"%{f}%", f"%{f}%", f"%{f}%"),
         )
     else:
         cur.execute("SELECT * FROM books ORDER BY UNI_LOWER(title)")
@@ -325,19 +329,28 @@ class LibraryApp(tk.Tk):
         # Список книг
         column_widths = {
             "id": 50,
-            "author": 200,
-            "title": 350,
+            "author": 100,
+            "title": 300,
+            "orig_name": 300,
             "lang": 50,
-            "description": 650,
+            "description": 500,
             "tags": 300,
         }
 
         self.tree = ttk.Treeview(
             main_frame,
-            columns=("id", "author", "title", "lang", "description", "tags"),
+            columns=(
+                "id",
+                "author",
+                "title",
+                "orig_name",
+                "lang",
+                "description",
+                "tags",
+            ),
             show="headings",
         )
-        sort_orders = {"author": True, "title": True}
+        sort_orders = {"author": True, "title": True, "orig_name": True}
 
         self.tree.heading("id", text="ID")
         self.tree.heading(
@@ -345,6 +358,11 @@ class LibraryApp(tk.Tk):
         )
         self.tree.heading(
             "title", text="Название", command=lambda: self.sort_column("title")
+        )
+        self.tree.heading(
+            "orig_name",
+            text="Оригинальное название",
+            command=lambda: self.sort_column("orig_name"),
         )
         self.tree.heading("lang", text="Язык")
         self.tree.heading("description", text="Описание")
@@ -428,10 +446,10 @@ class LibraryApp(tk.Tk):
         conn.close()
 
         for book in books:
-            book_id, title, author, desc, lang, bnf_path, favorite = book
+            book_id, title, orig_name, author, desc, lang, bnf_path, favorite = book
             tags = ", ".join(get_tags_for_book(book_id))
             self.tree.insert(
-                "", tk.END, values=(book_id, author, title, lang, desc, tags)
+                "", tk.END, values=(book_id, author, title, orig_name, lang, desc, tags)
             )
 
         self.status_var.set(f"Найдено книг автора '{author}': {len(books)}")
@@ -455,10 +473,10 @@ class LibraryApp(tk.Tk):
         conn.close()
 
         for book in books:
-            book_id, title, author, desc, lang, bnf_path, favorite = book
+            book_id, title, orig_name, author, desc, lang, bnf_path, favorite = book
             tags = ", ".join(get_tags_for_book(book_id))
             self.tree.insert(
-                "", tk.END, values=(book_id, author, title, lang, desc, tags)
+                "", tk.END, values=(book_id, author, title, orig_name, lang, desc, tags)
             )
 
         self.status_var.set(f"Найдено книг с тегом '{tag}': {len(books)}")
@@ -476,10 +494,10 @@ class LibraryApp(tk.Tk):
         restored_item = None
 
         for book in books:
-            book_id, title, author, desc, lang, bnf_path, favorite = book
+            book_id, title, orig_name, author, desc, lang, bnf_path, favorite = book
             tags = ", ".join(get_tags_for_book(book_id))
             item = self.tree.insert(
-                "", tk.END, values=(book_id, author, title, lang, desc, tags)
+                "", tk.END, values=(book_id, author, title, orig_name, lang, desc, tags)
             )
             if selected_book_id == str(book_id):
                 restored_item = item
@@ -494,9 +512,11 @@ class LibraryApp(tk.Tk):
         children = self.tree.get_children()
         position = children[self.tree.index(selected[0])]
         book = get_book(book_id)
-        book_id, title, author, desc, lang, bnf_path, favorite = book
+        book_id, title, orig_name, author, desc, lang, bnf_path, favorite = book
         tags = ", ".join(get_tags_for_book(book_id))
-        self.tree.item(position, values=(book_id, author, title, lang, desc, tags))
+        self.tree.item(
+            position, values=(book_id, author, title, orig_name, lang, desc, tags)
+        )
         self.show_details()
 
     def show_details(self, *args):
@@ -506,7 +526,7 @@ class LibraryApp(tk.Tk):
         book_id = self.tree.item(sel[0])["values"][0]
         book = get_book(book_id)
         if book:
-            _, title, author, desc, lang, bnf_path, favorite = book
+            _, title, orig_name, author, desc, lang, bnf_path, favorite = book
             tags = get_tags_for_book(book_id)
             folder = os.path.dirname(bnf_path) if bnf_path else None
             base_name = (
@@ -527,12 +547,16 @@ class LibraryApp(tk.Tk):
 
             # Название
             self.details_text.insert(tk.END, "Название: ", "label")
-            self.details_text.insert(tk.END, f"{title}\n", "value")
+            self.details_text.insert(tk.END, f"\n{title}\n", "value")
+
+            # Оригинальное название
+            self.details_text.insert(tk.END, "\nОригинальное название: ", "label")
+            self.details_text.insert(tk.END, f"\n{orig_name}\n", "value")
 
             # Автор (ссылка)
-            self.details_text.insert(tk.END, "Автор: ", "label")
+            self.details_text.insert(tk.END, "\nАвтор: ", "label")
             start_index = self.details_text.index(tk.INSERT)
-            self.details_text.insert(tk.END, f"{author}\n", "taglink")
+            self.details_text.insert(tk.END, f"\n{author}\n", "taglink")
             tag_name = f"authorlink_{book_id}"
             self.details_text.tag_add(
                 tag_name, start_index, f"{start_index}+{len(author)}c"
@@ -630,7 +654,7 @@ class LibraryApp(tk.Tk):
         if not book:
             return
 
-        _, title, author, desc, lang, bnf_path, favorite = book
+        _, title, orig_name, author, desc, lang, bnf_path, favorite = book
         folder = os.path.dirname(bnf_path) if bnf_path else None
         base_name = (
             os.path.splitext(os.path.basename(bnf_path))[0] if bnf_path else None
@@ -644,17 +668,17 @@ class LibraryApp(tk.Tk):
         sel = self.tree.selection()
         if not sel:
             return
-        # book_id = self.tree.item(sel[0])["values"][0]
+
         book = get_book(book_id)
         if not book:
             return
 
-        _, title, author, desc, lang, bnf_path, favorite = book
+        _, title, orig_name, author, desc, lang, bnf_path, favorite = book
         tags = get_tags_for_book(book_id)
 
         dialog = tk.Toplevel(self)
         dialog.title("Метаданные книги")
-        dialog.geometry("800x400")  # Увеличиваем высоту для многострочных полей
+        dialog.geometry("800x400")
         dialog.resizable(False, False)
 
         main_frame = ttk.Frame(dialog, padding="10")
@@ -664,6 +688,10 @@ class LibraryApp(tk.Tk):
         ttk.Label(dialog, text="Название").pack(anchor="w")
         title_var = tk.StringVar(value=title)
         ttk.Entry(dialog, textvariable=title_var).pack(fill="x")
+
+        ttk.Label(dialog, text="Оригинальное название").pack(anchor="w")
+        orig_name_var = tk.StringVar(value=orig_name)
+        ttk.Entry(dialog, textvariable=orig_name_var).pack(fill="x")
 
         ttk.Label(dialog, text="Автор").pack(anchor="w")
         author_var = tk.StringVar(value=author)
@@ -689,6 +717,7 @@ class LibraryApp(tk.Tk):
 
         def save_changes():
             new_title = title_var.get()
+            new_orig_name = orig_name_var.get()
             new_author = author_var.get()
             new_desc = desc_text.get("1.0", "end").strip()
             new_lang = lang_var.get().strip() or None
@@ -696,7 +725,13 @@ class LibraryApp(tk.Tk):
 
             # обновляем в БД
             add_or_update_book(
-                new_title, new_author, new_desc, new_lang, bnf_path, new_tags
+                new_title,
+                new_orig_name,
+                new_author,
+                new_desc,
+                new_lang,
+                bnf_path,
+                new_tags,
             )
 
             # обновляем bnf-файл
@@ -707,6 +742,7 @@ class LibraryApp(tk.Tk):
                     data.update(
                         {
                             "title": new_title,
+                            "orig_name": new_orig_name,
                             "author": new_author,
                             "description": new_desc,
                             "lang": new_lang,
@@ -739,7 +775,7 @@ class LibraryApp(tk.Tk):
         book = get_book(book_id)
         if not book:
             return
-        _, title, author, desc, lang, bnf_path = book
+        _, title, orig_name, author, desc, lang, bnf_path = book
         if not bnf_path or not os.path.exists(bnf_path):
             messagebox.showerror("Ошибка", "Файл .bnf не найден")
             return
@@ -764,6 +800,7 @@ class LibraryApp(tk.Tk):
                     data = json.load(f)
                 add_or_update_book(
                     data.get("title", ""),
+                    data.get("orig_name", ""),
                     data.get("author", ""),
                     data.get("description", ""),
                     lang=data.get("lang"),
@@ -803,6 +840,7 @@ class LibraryApp(tk.Tk):
 
                         add_or_update_book(
                             data.get("title", ""),
+                            data.get("orig_name", ""),
                             data.get("author", ""),
                             data.get("description", ""),
                             lang=data.get("lang"),
