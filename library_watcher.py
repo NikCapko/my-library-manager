@@ -33,6 +33,7 @@ def handle_file_event(file):
                 print(data)
             add_or_update_book(
                 data.get("title", ""),
+                data.get("orig_name", ""),
                 data.get("author", ""),
                 data.get("description", ""),
                 lang=data.get("lang"),
@@ -44,7 +45,9 @@ def handle_file_event(file):
             pass
 
 
-def add_or_update_book(title, author, description, lang=None, bnf_path=None, tags=None):
+def add_or_update_book(
+    title, orig_name, author, description, lang=None, bnf_path=None, tags=None
+):
     book_id = find_book_id(title, author)
     conn = connect()
     cur = conn.cursor()
@@ -52,19 +55,19 @@ def add_or_update_book(title, author, description, lang=None, bnf_path=None, tag
         print("updating book id")
         cur.execute(
             """
-            UPDATE books SET title=?, author=?, description=?, lang=?, bnf_path=?
+            UPDATE books SET title=?, orig_name=?, author=?, description=?, lang=?, bnf_path=?
             WHERE id=?
         """,
-            (title, author, description, lang, bnf_path, book_id),
+            (title, orig_name, author, description, lang, bnf_path, book_id),
         )
     else:
         print("creating new book")
         cur.execute(
             """
-            INSERT OR IGNORE INTO books (title, author, description, lang, bnf_path)
+            INSERT OR IGNORE INTO books (title, orig_name, author, description, lang, bnf_path)
             VALUES (?, ?, ?, ?, ?)
         """,
-            (title, author, description, lang, bnf_path),
+            (title, orig_name, author, description, lang, bnf_path),
         )
         book_id = cur.lastrowid
     conn.commit()

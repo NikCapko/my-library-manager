@@ -13,7 +13,7 @@ class BnfEditor:
     def __init__(self, root, filepath=None):
         self.root = root
         self.root.title("Редактор BNF метаданных")
-        self.root.geometry("800x400")
+        self.root.geometry("800x360")
         self.root.resizable(False, False)
 
         self.filepath = filepath
