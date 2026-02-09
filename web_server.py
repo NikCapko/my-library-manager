@@ -184,7 +184,10 @@ BOOK_HTML = """
     </div>
 
     <h1>{{ book['title'] }}</h1>
-    <h3>{{ book['orig_name'] }}</h3>
+
+    {% if book['orig_name'] %}
+        <h2>{{ book['orig_name'] }}</h2>
+    {% endif %}
 
      <script>
         // Показываем кнопку, когда пользователь прокрутил более чем на половину страницы
@@ -266,8 +269,10 @@ EDIT_HTML = """
         <label>Название:</label>
         <input type="text" name="title" value="{{ book['title'] }}">
 
-        <label>Оригинальное название:</label>
-        <input type="text" name="orig_name" value="{{ book['orig_name'] }}">
+        {% if book['lang']=="en-ru" %}
+            <label>Оригинальное название:</label>
+            <input type="text" name="orig_name" value="{{ book['orig_name'] }}">
+        {% endif %}
 
         <label>Автор:</label>
         <input type="text" name="author" value="{{ book['author'] }}">
