@@ -53,7 +53,7 @@ BASE_HTML = """
         {% if query or tag or author or favorite %}
         <a href="/" style="margin-left:10px;">Сброс</a>
         {% endif %}
-        <a href="/?favorite=1" style="margin-left:10px;">Только избранные</a>
+        <a href="/?favorite=1" style="margin-left:10px;">Избранное</a>
     </form>
     <br>
     {% if tags %}
@@ -73,6 +73,7 @@ BASE_HTML = """
             <th>★</th>
             <th><a href="/?sort=author{% if query %}&q={{ query }}{% endif %}{% if tag %}&tag={{ tag }}{% endif %}{% if author %}&author={{ author }}{% endif %}">Автор</a></th>
             <th><a href="/?sort=title{% if query %}&q={{ query }}{% endif %}{% if tag %}&tag={{ tag }}{% endif %}{% if author %}&author={{ author }}{% endif %}">Название</a></th>
+            <th>Оригинальное название</th>
             <th>Язык</th>
             <th>Описание</th>
             <th>Теги</th>
@@ -89,6 +90,7 @@ BASE_HTML = """
             </td>
             <td><a href="/?author={{ book['author'] }}" style="color:blue">{{ book['author'] }}</a></td>
             <td><a href="/book/{{ book['id'] }}">{{ book['title'] }}</a></td>
+            <td>{{ book['orig_name'] }}</td>
             <td>{{ book['lang'] }}</td>
             <td>{{ book['description'] }}</td>
             <td>
@@ -182,6 +184,7 @@ BOOK_HTML = """
     </div>
 
     <h1>{{ book['title'] }}</h1>
+    <h3>{{ book['orig_name'] }}</h3>
 
      <script>
         // Показываем кнопку, когда пользователь прокрутил более чем на половину страницы
@@ -262,6 +265,9 @@ EDIT_HTML = """
     <form method="post">
         <label>Название:</label>
         <input type="text" name="title" value="{{ book['title'] }}">
+
+        <label>Оригинальное название:</label>
+        <input type="text" name="orig_name" value="{{ book['orig_name'] }}">
 
         <label>Автор:</label>
         <input type="text" name="author" value="{{ book['author'] }}">
@@ -345,9 +351,19 @@ def get_books(query=None, tags=None, author=None, sort="title", favorite=False):
                 "LEFT JOIN book_tags ON books.id = book_tags.book_id LEFT JOIN tags ON tags.id = book_tags.tag_id"
             )
             where.append(
-                "(UNI_LOWER(books.title) LIKE UNI_LOWER(?) OR UNI_LOWER(books.author) LIKE UNI_LOWER(?) OR UNI_LOWER(tags.name) LIKE UNI_LOWER(?)) OR UNI_LOWER(books.description) LIKE UNI_LOWER(?)"
+                "(UNI_LOWER(books.title) LIKE UNI_LOWER(?) "
+                + "OR UNI_LOWER(books.orig_name) LIKE UNI_LOWER(?) "
+                + "OR UNI_LOWER(books.author) LIKE UNI_LOWER(?) "
+                + "OR UNI_LOWER(tags.name) LIKE UNI_LOWER(?)) "
+                + "OR UNI_LOWER(books.description) LIKE UNI_LOWER(?)"
             )
-            params += [f"%{query}%", f"%{query}%", f"%{query}%", f"%{query}%"]
+            params += [
+                f"%{query}%",
+                f"%{query}%",
+                f"%{query}%",
+                f"%{query}%",
+                f"%{query}%",
+            ]
         if favorite:
             where.append("books.favorite=1")
 
@@ -368,6 +384,7 @@ def get_books(query=None, tags=None, author=None, sort="title", favorite=False):
             {
                 "id": row["id"],
                 "title": row["title"],
+                "orig_name": row["orig_name"],
                 "description": row["description"],
                 "author": row["author"],
                 "lang": row["lang"],
@@ -390,6 +407,7 @@ def get_book(id):
     return {
         "id": row["id"],
         "title": row["title"],
+        "orig_name": row["orig_name"],
         "author": row["author"],
         "description": row["description"],
         "lang": row["lang"],
@@ -563,20 +581,21 @@ def edit_book(book_id):
 
     if request.method == "POST":
         title = request.form["title"].strip()
+        orig_name = request.form["orig_name"].strip()
         author = request.form["author"].strip()
         description = request.form["description"].strip()
         lang = request.form["lang"].strip()
-        tags = [t.strip() for t in request.form["tags"].split(",") if t.strip()]
+        tags = [t.strip().lower() for t in request.form["tags"].split(",") if t.strip()]
 
         # --- обновляем в БД ---
         conn = connect()
         cur = conn.cursor()
         cur.execute(
             """
-            UPDATE books SET title=?, author=?, description=?, lang=?
+            UPDATE books SET title=?, orig_name=?, author=?, description=?, lang=?
             WHERE id=?
         """,
-            (title, author, description, lang, book_id),
+            (title, orig_name, author, description, lang, book_id),
         )
         cur.execute("DELETE FROM book_tags WHERE book_id=?", (book_id,))
         conn.commit()
@@ -611,6 +630,7 @@ def edit_book(book_id):
             else:
                 data = {}
             data["title"] = title
+            data["orig_name"] = orig_name
             data["author"] = author
             data["description"] = description
             data["lang"] = lang
