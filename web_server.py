@@ -586,7 +586,7 @@ def edit_book(book_id):
 
     if request.method == "POST":
         title = request.form["title"].strip()
-        orig_name = request.form["orig_name"].strip()
+        orig_name = request.form.get("orig_name", "").strip()
         author = request.form["author"].strip()
         description = request.form["description"].strip()
         lang = request.form["lang"].strip()
