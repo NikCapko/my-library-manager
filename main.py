@@ -814,8 +814,6 @@ class LibraryApp(tk.Tk):
 
     def scan_folder_dialog(self):
         folder = filedialog.askdirectory()
-        self.library_path = folder
-        self.start_watcher()
         self.status_var.set("Сканирование...")
         self.scan_folder_async(folder)
 

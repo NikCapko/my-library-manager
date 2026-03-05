@@ -1,3 +1,4 @@
+import json
 import os
 import queue
 import re
@@ -47,6 +48,8 @@ BASE_HTML = """
 </head>
 <body>
     <h1>Библиотека</h1>
+    <a href="/update_books" style="margin-left:10px;">Обновить библиотеку</a>
+    <br>
     <form method="get">
         <input type="search" name="q" placeholder="Поиск..." value="{{ query }}">
         <button type="submit">Искать</button>
@@ -680,6 +683,123 @@ def toggle_fav(book_id):
         return redirect(url_for("index", **params))
 
 
+@app.route("/update_books")
+def scan_folder_async():
+    thread = threading.Thread(
+        target=scan_folder_worker, args=(get_library_path(),), daemon=True
+    )
+    thread.start()
+
+    return redirect(url_for("index"))
+
+
+def scan_folder_worker(folder):
+    count = 0
+
+    for root, _, files in os.walk(folder):
+        for file in files:
+            if file.endswith(".bnf"):
+                try:
+                    with open(os.path.join(root, file), "r", encoding="utf-8") as f:
+                        data = json.load(f)
+
+                    add_or_update_book(
+                        data.get("title", ""),
+                        data.get("orig_name", ""),
+                        data.get("author", ""),
+                        data.get("description", ""),
+                        lang=data.get("lang"),
+                        bnf_path=os.path.join(root, file),
+                        tags=data.get("tags", []),
+                    )
+                    count += 1
+                except Exception as e:
+                    print(f"Ошибка {file}: {e}")
+
+    check_db_files_exist()
+
+
+def check_db_files_exist():
+    """Удаляем из БД записи, у которых нет .bnf файла"""
+    conn = connect()
+    cur = conn.cursor()
+    cur.execute("SELECT id, bnf_path FROM books")
+    rows = cur.fetchall()
+
+    deleted = 0
+    for book_id, path in rows:
+        if not os.path.exists(path):
+            cur.execute("DELETE FROM books WHERE id=?", (book_id,))
+            deleted += 1
+
+    if deleted:
+        conn.commit()
+        print(f"Удалено {deleted} записей без файлов.")
+
+
+def add_or_update_book(
+    title, orig_name, author, description, lang=None, bnf_path=None, tags=None
+):
+    book_id = find_book_id(title, author)
+    conn = connect()
+    cur = conn.cursor()
+    if book_id:
+        cur.execute(
+            """
+            UPDATE books SET title=?, orig_name=?, author=?, description=?, lang=?, bnf_path=?
+            WHERE id=?
+        """,
+            (title, orig_name, author, description, lang, bnf_path, book_id),
+        )
+    else:
+        cur.execute(
+            """
+            INSERT INTO books (title, orig_name, author, description, lang, bnf_path)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """,
+            (title, orig_name, author, description, lang, bnf_path),
+        )
+        book_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    if tags:
+        save_tags(book_id, tags)
+
+
+def find_book_id(title, author):
+    conn = connect()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT id FROM books
+        WHERE UNI_LOWER(title)  = UNI_LOWER(?)
+          AND UNI_LOWER(author) = UNI_LOWER(?)
+    """,
+        (title, author),
+    )
+    row = cur.fetchone()
+    conn.close()
+    return row[0] if row else None
+
+
+def save_tags(book_id, tags):
+    conn = connect()
+    cur = conn.cursor()
+    for tag in tags:
+        tag = tag.strip()
+        if not tag:
+            continue
+        cur.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag,))
+        cur.execute("SELECT id FROM tags WHERE name=?", (tag,))
+        tag_id = cur.fetchone()[0]
+        cur.execute(
+            "INSERT OR IGNORE INTO book_tags (book_id, tag_id) VALUES (?, ?)",
+            (book_id, tag_id),
+        )
+    conn.commit()
+    conn.close()
+
+
 class StrictHeaderProcessor(HashHeaderProcessor):
     """Обрабатывает только заголовки с пробелом после #"""
 
@@ -711,13 +831,17 @@ def start_watcher():
     t.start()
 
 
-if __name__ == "__main__":
+def get_library_path():
     if getattr(sys, "frozen", False):
         base_dir = Path(sys.executable).parent
     else:
         base_dir = Path(__file__).resolve().parent
 
-    library_path = str(base_dir / "library")
+    return str(base_dir / "library")
+
+
+if __name__ == "__main__":
+    library_path = get_library_path()
     os.makedirs(library_path, exist_ok=True)
 
     event_queue = queue.Queue()
