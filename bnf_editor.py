@@ -49,12 +49,14 @@ class BnfEditor:
         )
         row += 1
 
-        ttk.Label(
+        self.orig_label = ttk.Label(
             main_frame, text="Оригинальное название:", font=("Arial", 10, "bold")
-        ).grid(row=row, column=0, sticky="w", pady=5)
-        ttk.Entry(main_frame, textvariable=self.orig_name_var, width=50).grid(
-            row=row, column=1, sticky="ew", padx=5, pady=5
         )
+        self.orig_label.grid(row=row, column=0, sticky="w", pady=5)
+        self.orig_entry = ttk.Entry(
+            main_frame, textvariable=self.orig_name_var, width=50
+        )
+        self.orig_entry.grid(row=row, column=1, sticky="ew", padx=5, pady=5)
         row += 1
 
         ttk.Label(main_frame, text="Автор:", font=("Arial", 10, "bold")).grid(
@@ -68,13 +70,16 @@ class BnfEditor:
         ttk.Label(main_frame, text="Язык:", font=("Arial", 10, "bold")).grid(
             row=row, column=0, sticky="w", pady=5
         )
-        ttk.Combobox(
+        lang_combo = ttk.Combobox(
             main_frame,
             textvariable=self.lang_var,
             values=("ru", "en-ru"),
             state="readonly",
             width=50,
-        ).grid(row=row, column=1, sticky="ew", padx=5, pady=5)
+        )
+        lang_combo.grid(row=row, column=1, sticky="ew", padx=5, pady=5)
+        lang_combo.bind("<<ComboboxSelected>>", self.on_lang_change)
+        self.on_lang_change()
         row += 1
 
         ttk.Label(
@@ -114,6 +119,16 @@ class BnfEditor:
             side=tk.LEFT, padx=5
         )
 
+    def on_lang_change(self, event=None):
+        if self.lang_var.get() != "ru":
+            self.orig_label.grid()
+            self.orig_entry.grid()
+            self.root.geometry("800x360")
+        else:
+            self.orig_label.grid_remove()
+            self.orig_entry.grid_remove()
+            self.root.geometry("800x320")
+
     def load_from_filename(self, filepath):
         """Парсинг названия и автора из имени файла .md"""
         base_dir = os.path.dirname(filepath)
@@ -142,6 +157,7 @@ class BnfEditor:
                 self.orig_name_var.set(data.get("orig_name", ""))
                 self.author_var.set(data.get("author", ""))
                 self.lang_var.set(data.get("lang", ""))
+                self.on_lang_change()
                 self.tags_var.set(", ".join(data.get("tags", [])))
                 self.desc_text.insert("1.0", data.get("description", ""))
         except Exception:
