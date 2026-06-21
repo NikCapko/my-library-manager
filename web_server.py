@@ -844,6 +844,6 @@ if __name__ == "__main__":
     library_path = get_library_path()
     os.makedirs(library_path, exist_ok=True)
 
-    event_queue = queue.Queue()
-    start_watcher()
+    # event_queue = queue.Queue()
+    # start_watcher()
     app.run(host="0.0.0.0", port=5050, debug=True)
