@@ -297,9 +297,9 @@ class LibraryApp(tk.Tk):
         check_db_files_exist()
         self.refresh_books()
 
-        self.event_queue = queue.Queue()
-        self.start_watcher()
-        self.process_fs_events()
+        # self.event_queue = queue.Queue()
+        # self.start_watcher()
+        # self.process_fs_events()
 
     def create_widgets(self):
         # Панель поиска
