@@ -300,6 +300,21 @@ EDIT_HTML = """
 </html>
 """
 
+UPDATE_HTML = """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+        <p><a href="/">Назад к списку</a></p>
+    <title>Обновление библиотеки</title>
+</head>
+<body>
+<h1>Обновление библиотеки</h1>
+</body>
+</html>
+"""
+
 
 # --- БД ---
 def connect():
@@ -690,7 +705,7 @@ def scan_folder_async():
     )
     thread.start()
 
-    return redirect(url_for("index"))
+    return render_template_string(UPDATE_HTML)
 
 
 def scan_folder_worker(folder):
