@@ -350,9 +350,9 @@ class LibraryApp(tk.Tk):
             ),
             show="headings",
         )
-        sort_orders = {"author": True, "title": True, "orig_name": True}
+        self.sort_orders = {"id": True, "author": True, "title": True, "orig_name": True, "lang": True}
 
-        self.tree.heading("id", text="ID")
+        self.tree.heading("id", text="ID", command=lambda: self.sort_column("id"))
         self.tree.heading(
             "author", text="Автор", command=lambda: self.sort_column("author")
         )
@@ -364,7 +364,7 @@ class LibraryApp(tk.Tk):
             text="Оригинальное название",
             command=lambda: self.sort_column("orig_name"),
         )
-        self.tree.heading("lang", text="Язык")
+        self.tree.heading("lang", text="Язык", command=lambda: self.sort_column("lang"),)
         self.tree.heading("description", text="Описание")
         self.tree.heading("tags", text="Теги")
         for col in self.tree["columns"]:
