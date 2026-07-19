@@ -419,7 +419,20 @@ class LibraryApp(tk.Tk):
         # получаем все элементы
         data = [(self.tree.set(k, col), k) for k in self.tree.get_children("")]
         # сортируем
-        data.sort(reverse=not self.sort_orders[col])
+        # Определяем ключ сортировки в зависимости от имени колонки
+        if col == "id":
+                # Сортировка как ЧИСЛА
+            def num_key(t):
+                try:
+                    return int(t[0])
+                except ValueError:
+                    # Если вдруг попалась пустая строка или не число, отправляем в конец/начало
+                    return float('inf') if self.sort_orders[col] else float('-inf')
+            data.sort(key=num_key, reverse=not self.sort_orders[col])
+        else:
+            # Сортировка как СТРОКИ
+            data.sort(reverse=not self.sort_orders[col])
+
         for index, (val, k) in enumerate(data):
             self.tree.move(k, "", index)
         # меняем направление сортировки на противоположное
