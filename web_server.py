@@ -72,7 +72,7 @@ BASE_HTML = """
     {% endif %}
     <table>
         <tr>
-            <th>ID</th>
+            <th><a href="/?sort=id{% if query %}&q={{ query }}{% endif %}{% if tag %}&tag={{ tag }}{% endif %}{% if author %}&author={{ author }}{% endif %}">ID</a></th>
             <th>★</th>
             <th><a href="/?sort=author{% if query %}&q={{ query }}{% endif %}{% if tag %}&tag={{ tag }}{% endif %}{% if author %}&author={{ author }}{% endif %}">Автор</a></th>
             <th><a href="/?sort=title{% if query %}&q={{ query }}{% endif %}{% if tag %}&tag={{ tag }}{% endif %}{% if author %}&author={{ author }}{% endif %}">Название</a></th>
@@ -338,7 +338,7 @@ def connect():
 
 
 def get_books(query=None, tags=None, author=None, sort="title", favorite=False):
-    if sort not in ("title", "author"):
+    if sort not in ("title", "author", "id"):
         sort = "title"
 
     conn = connect()
