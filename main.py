@@ -110,7 +110,14 @@ def get_tags_for_book(book_id):
 
 
 def add_or_update_book(
-    title, orig_name, author, description, lang=None, bnf_path=None, tags=None
+    title,
+    orig_name,
+    author,
+    description,
+    lang=None,
+    favorite=False,
+    bnf_path=None,
+    tags=None,
 ):
     book_id = find_book_id(title, author)
     conn = connect()
@@ -118,18 +125,18 @@ def add_or_update_book(
     if book_id:
         cur.execute(
             """
-            UPDATE books SET title=?, orig_name=?, author=?, description=?, lang=?, bnf_path=?
+            UPDATE books SET title=?, orig_name=?, author=?, description=?, lang=?, favorite=?, bnf_path=?
             WHERE id=?
         """,
-            (title, orig_name, author, description, lang, bnf_path, book_id),
+            (title, orig_name, author, description, lang, favorite, bnf_path, book_id),
         )
     else:
         cur.execute(
             """
-            INSERT INTO books (title, orig_name, author, description, lang, bnf_path)
+            INSERT INTO books (title, orig_name, author, description, lang, favorite, bnf_path)
             VALUES (?, ?, ?, ?, ?, ?)
         """,
-            (title, orig_name, author, description, lang, bnf_path),
+            (title, orig_name, author, description, lang, favorite, bnf_path),
         )
         book_id = cur.lastrowid
     conn.commit()
@@ -329,6 +336,7 @@ class LibraryApp(tk.Tk):
         # Список книг
         column_widths = {
             "id": 50,
+            "favorite": 30,
             "author": 100,
             "title": 300,
             "orig_name": 300,
@@ -341,6 +349,7 @@ class LibraryApp(tk.Tk):
             main_frame,
             columns=(
                 "id",
+                "favorite",
                 "author",
                 "title",
                 "orig_name",
@@ -350,9 +359,19 @@ class LibraryApp(tk.Tk):
             ),
             show="headings",
         )
-        self.sort_orders = {"id": True, "author": True, "title": True, "orig_name": True, "lang": True}
+        self.sort_orders = {
+            "id": True,
+            "favorite": True,
+            "author": True,
+            "title": True,
+            "orig_name": True,
+            "lang": True,
+        }
 
         self.tree.heading("id", text="ID", command=lambda: self.sort_column("id"))
+        self.tree.heading(
+            "favorite", text="Изб.", command=lambda: self.sort_column("favorite")
+        )
         self.tree.heading(
             "author", text="Автор", command=lambda: self.sort_column("author")
         )
@@ -364,7 +383,11 @@ class LibraryApp(tk.Tk):
             text="Оригинальное название",
             command=lambda: self.sort_column("orig_name"),
         )
-        self.tree.heading("lang", text="Язык", command=lambda: self.sort_column("lang"),)
+        self.tree.heading(
+            "lang",
+            text="Язык",
+            command=lambda: self.sort_column("lang"),
+        )
         self.tree.heading("description", text="Описание")
         self.tree.heading("tags", text="Теги")
         for col in self.tree["columns"]:
@@ -421,13 +444,14 @@ class LibraryApp(tk.Tk):
         # сортируем
         # Определяем ключ сортировки в зависимости от имени колонки
         if col == "id":
-                # Сортировка как ЧИСЛА
+            # Сортировка как ЧИСЛА
             def num_key(t):
                 try:
                     return int(t[0])
                 except ValueError:
                     # Если вдруг попалась пустая строка или не число, отправляем в конец/начало
-                    return float('inf') if self.sort_orders[col] else float('-inf')
+                    return float("inf") if self.sort_orders[col] else float("-inf")
+
             data.sort(key=num_key, reverse=not self.sort_orders[col])
         else:
             # Сортировка как СТРОКИ
@@ -462,10 +486,24 @@ class LibraryApp(tk.Tk):
             book_id, title, orig_name, author, desc, lang, bnf_path, favorite = book
             tags = ", ".join(get_tags_for_book(book_id))
             self.tree.insert(
-                "", tk.END, values=(book_id, author, title, orig_name, lang, desc, tags)
+                "",
+                tk.END,
+                values=(
+                    book_id,
+                    self.check_favorite(favorite),
+                    author,
+                    title,
+                    orig_name,
+                    lang,
+                    desc,
+                    tags,
+                ),
             )
 
         self.status_var.set(f"Найдено книг автора '{author}': {len(books)}")
+
+    def check_favorite(self, favorite):
+        return "★" if favorite == 1 else "☆"
 
     def search_by_tag(self, tag):
         self.search_var.set(tag)
@@ -489,7 +527,18 @@ class LibraryApp(tk.Tk):
             book_id, title, orig_name, author, desc, lang, bnf_path, favorite = book
             tags = ", ".join(get_tags_for_book(book_id))
             self.tree.insert(
-                "", tk.END, values=(book_id, author, title, orig_name, lang, desc, tags)
+                "",
+                tk.END,
+                values=(
+                    book_id,
+                    self.check_favorite(favorite),
+                    author,
+                    title,
+                    orig_name,
+                    lang,
+                    desc,
+                    tags,
+                ),
             )
 
         self.status_var.set(f"Найдено книг с тегом '{tag}': {len(books)}")
@@ -510,7 +559,18 @@ class LibraryApp(tk.Tk):
             book_id, title, orig_name, author, desc, lang, bnf_path, favorite = book
             tags = ", ".join(get_tags_for_book(book_id))
             item = self.tree.insert(
-                "", tk.END, values=(book_id, author, title, orig_name, lang, desc, tags)
+                "",
+                tk.END,
+                values=(
+                    book_id,
+                    self.check_favorite(favorite),
+                    author,
+                    title,
+                    orig_name,
+                    lang,
+                    desc,
+                    tags,
+                ),
             )
             if selected_book_id == str(book_id):
                 restored_item = item
@@ -528,7 +588,17 @@ class LibraryApp(tk.Tk):
         book_id, title, orig_name, author, desc, lang, bnf_path, favorite = book
         tags = ", ".join(get_tags_for_book(book_id))
         self.tree.item(
-            position, values=(book_id, author, title, orig_name, lang, desc, tags)
+            position,
+            values=(
+                book_id,
+                self.check_favorite(favorite),
+                author,
+                title,
+                orig_name,
+                lang,
+                desc,
+                tags,
+            ),
         )
         self.show_details()
 
@@ -582,6 +652,10 @@ class LibraryApp(tk.Tk):
             # Описание
             self.details_text.insert(tk.END, "\nОписание:\n", "label")
             self.details_text.insert(tk.END, desc, "value")
+
+            # Избранное
+            self.details_text.insert(tk.END, "\nИзбранное:\n", "label")
+            self.details_text.insert(tk.END, self.check_favorite(favorite), "value")
 
             # Теги
             self.details_text.insert(tk.END, "\n\nТеги: ", "label")
@@ -691,7 +765,7 @@ class LibraryApp(tk.Tk):
 
         dialog = tk.Toplevel(self)
         dialog.title("Метаданные книги")
-        dialog.geometry("800x400")
+        dialog.geometry("800x450")
         dialog.resizable(False, False)
 
         main_frame = ttk.Frame(dialog, padding="10")
@@ -719,6 +793,15 @@ class LibraryApp(tk.Tk):
             state="readonly",
         ).pack(fill="x")
 
+        ttk.Label(dialog, text="Избранное:").pack(anchor="w")
+        favorite_var = tk.BooleanVar(value=favorite)
+        ttk.Checkbutton(
+            dialog,
+            variable=favorite_var,
+            onvalue=True,
+            offvalue=False,
+        ).pack(fill="x")
+
         ttk.Label(dialog, text="Теги (через запятую)").pack(anchor="w")
         tags_var = tk.StringVar(value=", ".join(tags))
         ttk.Entry(dialog, textvariable=tags_var).pack(fill="x")
@@ -734,6 +817,7 @@ class LibraryApp(tk.Tk):
             new_author = author_var.get()
             new_desc = desc_text.get("1.0", "end").strip()
             new_lang = lang_var.get().strip() or None
+            new_favorite = favorite_var.get()
             new_tags = [t.strip() for t in tags_var.get().split(",") if t.strip()]
 
             # обновляем в БД
@@ -743,6 +827,7 @@ class LibraryApp(tk.Tk):
                 new_author,
                 new_desc,
                 new_lang,
+                new_favorite,
                 bnf_path,
                 new_tags,
             )
@@ -759,6 +844,7 @@ class LibraryApp(tk.Tk):
                             "author": new_author,
                             "description": new_desc,
                             "lang": new_lang,
+                            "favorite": new_favorite,
                             "tags": new_tags,
                         }
                     )
@@ -780,31 +866,6 @@ class LibraryApp(tk.Tk):
         cancel_button = ttk.Button(buttons_frame, text="Отмена", command=dialog.destroy)
         cancel_button.pack(side=tk.LEFT, padx=5)
 
-    def open_bnf_file(self, *args):
-        sel = self.tree.selection()
-        if not sel:
-            return
-        book_id = self.tree.item(sel[0])["values"][0]
-        book = get_book(book_id)
-        if not book:
-            return
-        _, title, orig_name, author, desc, lang, bnf_path = book
-        if not bnf_path or not os.path.exists(bnf_path):
-            messagebox.showerror("Ошибка", "Файл .bnf не найден")
-            return
-
-        folder = os.path.dirname(bnf_path)
-        base_name = os.path.splitext(os.path.basename(bnf_path))[0]
-
-        try:
-            target_file = os.path.join(folder, f"{base_name}.bnf")
-            if not os.path.exists(target_file):
-                messagebox.showerror("Ошибка", f"Файл {target_file} не найден")
-                return
-            subprocess.Popen(["mousepad", target_file])
-        except Exception as e:
-            messagebox.showerror("Ошибка", str(e))
-
     def import_bnf(self):
         filepath = filedialog.askopenfilename(filetypes=[("Info files", "*.bnf")])
         if filepath:
@@ -817,6 +878,7 @@ class LibraryApp(tk.Tk):
                     data.get("author", ""),
                     data.get("description", ""),
                     lang=data.get("lang"),
+                    favorite=data.get("favorite", False),
                     bnf_path=filepath,
                     tags=data.get("tags", []),
                 )
@@ -855,6 +917,7 @@ class LibraryApp(tk.Tk):
                             data.get("author", ""),
                             data.get("description", ""),
                             lang=data.get("lang"),
+                            favorite=data.get("favorite", False),
                             bnf_path=os.path.join(root, file),
                             tags=data.get("tags", []),
                         )

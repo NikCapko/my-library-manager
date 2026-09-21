@@ -37,6 +37,7 @@ class BnfEditor:
         self.orig_name_var = tk.StringVar()
         self.author_var = tk.StringVar()
         self.lang_var = tk.StringVar(value="ru")
+        self.favorite_var = tk.BooleanVar()
         self.tags_var = tk.StringVar()
 
         row = 0
@@ -80,6 +81,17 @@ class BnfEditor:
         lang_combo.grid(row=row, column=1, sticky="ew", padx=5, pady=5)
         lang_combo.bind("<<ComboboxSelected>>", self.on_lang_change)
         self.on_lang_change()
+        row += 1
+
+        ttk.Label(main_frame, text="Избранное:", font=("Arial", 10, "bold")).grid(
+            row=row, column=0, sticky="w", pady=5
+        )
+        ttk.Checkbutton(
+            main_frame,
+            variable=favorite_var,
+            onvalue=True,
+            offvalue=False,
+        ).grid(row=row, column=1, sticky="ew", padx=5, pady=(8, 4))
         row += 1
 
         ttk.Label(
@@ -157,6 +169,7 @@ class BnfEditor:
                 self.orig_name_var.set(data.get("orig_name", ""))
                 self.author_var.set(data.get("author", ""))
                 self.lang_var.set(data.get("lang", ""))
+                self.favorite_var.set(data.get("favorite", False))
                 self.on_lang_change()
                 self.tags_var.set(", ".join(data.get("tags", [])))
                 self.desc_text.insert("1.0", data.get("description", ""))
@@ -169,6 +182,7 @@ class BnfEditor:
             "author": self.author_var.get(),
             "orig_name": self.orig_name_var.get(),
             "lang": self.lang_var.get(),
+            "favorite": self.favorite_var.get(),
             "tags": [
                 tag.strip() for tag in self.tags_var.get().split(",") if tag.strip()
             ],
