@@ -13,6 +13,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from watchdog.observers import Observer
 
+from dialog_manager import DialogManager
 from library_watcher import LibraryWatcher
 
 DB_FILE = "library.db"
@@ -307,6 +308,11 @@ class LibraryApp(tk.Tk):
         self.event_queue = queue.Queue()
         self.start_watcher()
         self.process_fs_events()
+
+        self.history_path = os.path.join(
+            os.path.expanduser("~"), ".bnf_tag_history.json"
+        )
+        self.tag_history = self._load_tag_history()
 
     def create_widgets(self):
         # Панель поиска
@@ -751,6 +757,27 @@ class LibraryApp(tk.Tk):
         elif lang == "en-ru":
             open_lang_file(folder, base_name, "en-ru", True)
 
+    def _load_tag_history(self):
+        if not os.path.exists(self.history_path):
+            return []
+        try:
+            with open(self.history_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    return [str(t).strip().lower() for t in data if str(t).strip()]
+        except (json.JSONDecodeError, OSError):
+            pass
+        return []
+
+    def _save_tag_history(self, all_tags):
+        history = sorted(all_tags[:])
+        try:
+            with open(self.history_path, "w", encoding="utf-8") as f:
+                json.dump(history, f, ensure_ascii=False, indent=2)
+            self.tag_history = history
+        except OSError:
+            pass
+
     def open_metadata_dialog(self, book_id):
         sel = self.tree.selection()
         if not sel:
@@ -763,53 +790,223 @@ class LibraryApp(tk.Tk):
         _, title, orig_name, author, desc, lang, bnf_path, favorite = book
         tags = get_tags_for_book(book_id)
 
+        # Переменные
+        title_var = tk.StringVar(value=title)
+        orig_name_var = tk.StringVar(value=orig_name)
+        author_var = tk.StringVar(value=author)
+        lang_var = tk.StringVar(value=lang)
+        favorite_var = tk.BooleanVar(value=favorite)
+        tag_entry_var = tk.StringVar()
+
+        all_tags = sorted(self.tag_history[:])
+        current_tags = tags
+
         dialog = tk.Toplevel(self)
         dialog.title("Метаданные книги")
-        dialog.geometry("800x450")
+        dialog.geometry("1100x750")
         dialog.resizable(False, False)
+        dialog.bind("<Control-s>", lambda e: save_changes())
 
         main_frame = ttk.Frame(dialog, padding="10")
         main_frame.pack(expand=True, fill=tk.BOTH)
 
+        row = 0
+
         # поля
-        ttk.Label(dialog, text="Название").pack(anchor="w")
-        title_var = tk.StringVar(value=title)
-        ttk.Entry(dialog, textvariable=title_var).pack(fill="x")
+        ttk.Label(main_frame, text="Название:", font=("Arial", 10, "bold")).grid(
+            row=row, column=0, sticky="w", pady=5
+        )
+        ttk.Entry(main_frame, textvariable=title_var, width=52).grid(
+            row=row, column=1, sticky="ew", padx=5, pady=5
+        )
+        row += 1
 
-        ttk.Label(dialog, text="Оригинальное название").pack(anchor="w")
-        orig_name_var = tk.StringVar(value=orig_name)
-        ttk.Entry(dialog, textvariable=orig_name_var).pack(fill="x")
+        if lang != "ru":
+            ttk.Label(
+                main_frame, text="Оригинальное\nназвание:", font=("Arial", 10, "bold")
+            ).grid(row=row, column=0, sticky="w", pady=5)
+            ttk.Entry(main_frame, textvariable=orig_name_var, width=52).grid(
+                row=row, column=1, sticky="ew", padx=5, pady=5
+            )
+            row += 1
 
-        ttk.Label(dialog, text="Автор").pack(anchor="w")
-        author_var = tk.StringVar(value=author)
-        ttk.Entry(dialog, textvariable=author_var).pack(fill="x")
+        ttk.Label(main_frame, text="Автор:", font=("Arial", 10, "bold")).grid(
+            row=row, column=0, sticky="w", pady=5
+        )
+        ttk.Entry(main_frame, textvariable=author_var, width=52).grid(
+            row=row, column=1, sticky="ew", padx=5, pady=5
+        )
+        row += 1
 
-        ttk.Label(dialog, text="Язык").pack(anchor="w")
-        lang_var = tk.StringVar(value=lang or "ru")
+        ttk.Label(main_frame, text="Язык:", font=("Arial", 10, "bold")).grid(
+            row=row, column=0, sticky="w", pady=5
+        )
         ttk.Combobox(
-            dialog,
+            main_frame,
             textvariable=lang_var,
-            values=("ru", "en-ru"),
+            values=("en-ru", "ru"),
             state="readonly",
-        ).pack(fill="x")
+            width=50,
+        ).grid(row=row, column=1, sticky="ew", padx=5, pady=5)
+        row += 1
 
-        ttk.Label(dialog, text="Избранное:").pack(anchor="w")
-        favorite_var = tk.BooleanVar(value=favorite)
+        ttk.Label(main_frame, text="Избранное:", font=("Arial", 10, "bold")).grid(
+            row=row, column=0, sticky="w", pady=5
+        )
         ttk.Checkbutton(
-            dialog,
-            variable=favorite_var,
+            main_frame,
+            variable=favorite,
             onvalue=True,
             offvalue=False,
-        ).pack(fill="x")
+        ).grid(row=row, column=1, sticky="ew", padx=5, pady=(8, 4))
+        row += 1
 
-        ttk.Label(dialog, text="Теги (через запятую)").pack(anchor="w")
-        tags_var = tk.StringVar(value=", ".join(tags))
-        ttk.Entry(dialog, textvariable=tags_var).pack(fill="x")
+        # ===== Теги =====
+        ttk.Label(main_frame, text="Теги:", font=("Arial", 10, "bold")).grid(
+            row=row, column=0, sticky="nw", pady=(8, 4)
+        )
 
-        ttk.Label(dialog, text="Описание").pack(anchor="w")
-        desc_text = tk.Text(dialog, height=5)
+        tags_container = ttk.Frame(main_frame)
+        tags_container.grid(row=row, column=1, sticky="ew", padx=5, pady=(8, 4))
+
+        # Поле ввода нового тега
+        tag_entry = ttk.Entry(tags_container, textvariable=tag_entry_var, width=52)
+        tag_entry.pack(fill=tk.X, pady=(0, 8))
+
+        # Контейнер для чипсов с переносом строк
+        chips_wrapper = ttk.Frame(tags_container)
+        chips_wrapper.pack(fill=tk.BOTH, expand=True)
+
+        # Text-виджет позволяет чипсам переноситься на новую строку
+        tags_display = tk.Text(
+            chips_wrapper,
+            height=16,  # примерно 16 строк чипсов
+            wrap="word",
+            relief="flat",
+            borderwidth=0,
+            highlightthickness=0,
+            padx=5,
+            pady=2,
+            spacing2=2,
+            cursor="arrow",
+            state="normal",
+        )
+        tags_display.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # Вертикальный скролл, если чипсов очень много
+        chips_scroll = ttk.Scrollbar(
+            chips_wrapper, orient="vertical", command=tags_display.yview
+        )
+        chips_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        tags_display.configure(yscrollcommand=chips_scroll.set)
+
+        def refresh_tags_display():
+            tags_display.configure(state="normal")
+            tags_display.delete("1.0", tk.END)
+
+            for tag in all_tags:
+                is_active = tag in current_tags
+
+                if is_active:
+                    bg = "#2980b9"
+                    fg = "white"
+                else:
+                    bg = "#ecf0f1"
+                    fg = "#2c3e50"
+
+                chip = tk.Frame(
+                    tags_display,
+                    bg=bg,
+                    cursor="hand2",
+                    highlightbackground="#bdc3c7",
+                    highlightthickness=1,
+                )
+
+                lbl = tk.Label(
+                    chip,
+                    text=tag,
+                    bg=bg,
+                    fg=fg,
+                    padx=5,
+                    pady=3,
+                    font=("Arial", 9),
+                    cursor="hand2",
+                )
+                lbl.pack()
+
+                def make_toggle(t):
+                    def toggle(event=None):
+                        if t in current_tags:
+                            current_tags.remove(t)
+                        else:
+                            current_tags.append(t)
+                        refresh_tags_display()
+
+                    return toggle
+
+                toggle_fn = make_toggle(tag)
+                chip.bind("<Button-1>", toggle_fn)
+                lbl.bind("<Button-1>", toggle_fn)
+
+                # Подсветка при наведении
+                def on_enter(e, c=chip, active=is_active):
+                    new_bg = "#3498db" if active else "#d5dbdb"
+                    c.configure(bg=new_bg)
+                    for child in c.winfo_children():
+                        child.configure(bg=new_bg)
+
+                def on_leave(e, c=chip, b=bg):
+                    c.configure(bg=b)
+                    for child in c.winfo_children():
+                        child.configure(bg=b)
+
+                chip.bind("<Enter>", on_enter)
+                chip.bind("<Leave>", on_leave)
+                lbl.bind("<Enter>", on_enter)
+                lbl.bind("<Leave>", on_leave)
+
+                # Вставляем чип + маленький пробел
+                tags_display.window_create(tk.END, window=chip)
+                tags_display.insert(tk.END, " ")
+
+            tags_display.configure(state="disabled")
+
+        def on_return(event):
+            tag = tag_entry_var.get().strip().lower()
+            if not tag:
+                return "break"
+
+            if tag not in all_tags:
+                all_tags.insert(0, tag)
+
+            if tag not in current_tags:
+                current_tags.append(tag)
+
+            tag_entry_var.set("")
+            refresh_tags_display()
+            return "break"
+
+        tag_entry.bind("<Return>", on_return)
+
+        # Первоначальная отрисовка
+        refresh_tags_display()
+        row += 1
+
+        ttk.Label(main_frame, text="Описание:", font=("Arial", 10, "bold")).grid(
+            row=row, column=0, sticky="nw", pady=5
+        )
+        desc_frame = ttk.Frame(main_frame)
+        desc_frame.grid(row=row, column=1, sticky="nsew", padx=5, pady=5)
+
+        desc_text = tk.Text(desc_frame, height=5, wrap=tk.WORD, undo=True)
+        desc_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        desc_scroll = ttk.Scrollbar(desc_frame, command=desc_text.yview)
+        desc_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        desc_text.configure(yscrollcommand=desc_scroll.set)
         desc_text.insert("1.0", desc)
-        desc_text.pack(fill="both", expand=True)
+
+        main_frame.columnconfigure(1, weight=1)
+        main_frame.rowconfigure(row, weight=1)
 
         def save_changes():
             new_title = title_var.get()
@@ -818,7 +1015,8 @@ class LibraryApp(tk.Tk):
             new_desc = desc_text.get("1.0", "end").strip()
             new_lang = lang_var.get().strip() or None
             new_favorite = favorite_var.get()
-            new_tags = [t.strip() for t in tags_var.get().split(",") if t.strip()]
+
+            self._save_tag_history(all_tags)
 
             # обновляем в БД
             add_or_update_book(
@@ -829,7 +1027,7 @@ class LibraryApp(tk.Tk):
                 new_lang,
                 new_favorite,
                 bnf_path,
-                new_tags,
+                current_tags,
             )
 
             # обновляем bnf-файл
@@ -845,7 +1043,7 @@ class LibraryApp(tk.Tk):
                             "description": new_desc,
                             "lang": new_lang,
                             "favorite": new_favorite,
-                            "tags": new_tags,
+                            "tags": current_tags,
                         }
                     )
                     with open(bnf_path, "w", encoding="utf-8") as f:
@@ -855,6 +1053,7 @@ class LibraryApp(tk.Tk):
 
             self.refresh_book(book_id)
             dialog.destroy()
+            DialogManager.show_dialog("Сохранено", "Метаданные успешно сохранены.")
 
         # Кнопки
         buttons_frame = ttk.Frame(dialog)
