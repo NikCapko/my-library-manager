@@ -234,8 +234,11 @@ def open_folder(file_path):
                     )
                     == 0
                 ):
-                    if fm in ("nautilus", "dolphin"):
-                        subprocess.Popen([fm, "--select", file_path])
+                    if fm == "nautilus":
+                        parent = os.path.dirname(os.path.abspath(file_path))
+                        subprocess.Popen(["nautilus", "--new-window", parent])
+                    elif fm == "dolphin":
+                        subprocess.Popen(["dolphin", "--select", file_path])
                     else:
                         subprocess.Popen([fm, file_path])
                     return
@@ -261,8 +264,8 @@ def open_lang_file(folder, base_name, lang_code, paraline=False):
     try:
         if paraline:
             subprocess.Popen(
-                ["/home/nikolay/bin/paraline", file_path],
-                cwd="/home/nikolay/Projects/parallel_editor",
+                ["/home/nikolay/bin/paraline_qt", file_path],
+                cwd="/home/nikolay/Projects/parallel_editor_qt",
             )
         else:
             subprocess.Popen(["ghostwriter", file_path])
@@ -280,8 +283,8 @@ def open_file(folder, base_name):
 
     try:
         subprocess.Popen(
-            ["/home/nikolay/bin/md_editor", file_path],
-            cwd="/home/nikolay/Projects/parallel_editor",
+            ["/home/nikolay/bin/md_editor_qt", file_path],
+            cwd="/home/nikolay/Projects/md_editor_qt",
         )
     except Exception as e:
         messagebox.showerror("Ошибка", str(e))
